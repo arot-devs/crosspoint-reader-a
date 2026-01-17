@@ -251,13 +251,15 @@ void PomodoroActivity::render(const EInkDisplay::RefreshMode mode) {
 
   const bool showSeconds = model.shouldShowSeconds();
   const int displayValue = showSeconds ? model.getDisplaySecondsBucket() : model.getDisplayMinutes();
-  const float fraction = std::min(1.0f, std::max(0.0f, (showSeconds ? 60.0f : displayValue * 60.0f) / 3600.0f));
-  const float pointerAngle = kStartAngle + fraction * kTwoPi;
+  const float remainingFraction =
+      std::min(1.0f, std::max(0.0f, static_cast<float>(model.getRemainingSeconds()) / 3600.0f));
+  const float sweepAngle = -remainingFraction * kTwoPi;
+  const float pointerAngle = kStartAngle + sweepAngle;
 
-  renderDial(centerX, centerY, outerRadius, innerRadius, fraction, !useGrayscale);
+  renderDial(centerX, centerY, outerRadius, innerRadius, sweepAngle, !useGrayscale);
   renderDialTicks(centerX, centerY, outerRadius - 2, true);
   renderDialNumerals(centerX, centerY, numberRadius, true);
-  if (fraction > 0.0f) {
+  if (remainingFraction > 0.0f) {
     renderPointer(centerX, centerY, outerRadius, pointerAngle, true);
   }
   renderCenterHub(centerX, centerY, true);
@@ -308,8 +310,8 @@ void PomodoroActivity::render(const EInkDisplay::RefreshMode mode) {
 
   renderer.displayBuffer(mode);
 
-  if (useGrayscale && fraction > 0.0f) {
-    applyGrayscaleWedgeMask(centerX, centerY, outerRadius, innerRadius, numberRadius, fraction, pointerAngle);
+  if (useGrayscale && remainingFraction > 0.0f) {
+    applyGrayscaleWedgeMask(centerX, centerY, outerRadius, innerRadius, sweepAngle);
   }
 
   lastShowSeconds = showSeconds;
@@ -318,14 +320,14 @@ void PomodoroActivity::render(const EInkDisplay::RefreshMode mode) {
 }
 
 void PomodoroActivity::renderDial(const int centerX, const int centerY, const int outerRadius, const int innerRadius,
-                                  const float fraction, const bool dither) {
-  if (fraction <= 0.0f) {
+                                  const float sweepAngle, const bool dither) {
+  if (sweepAngle == 0.0f) {
     return;
   }
   if (dither) {
-    drawWedgeDithered(centerX, centerY, innerRadius, outerRadius, fraction);
+    drawWedgeDithered(centerX, centerY, innerRadius, outerRadius, sweepAngle);
   } else {
-    drawWedgeSolid(centerX, centerY, innerRadius, outerRadius, fraction, true);
+    drawWedgeSolid(centerX, centerY, innerRadius, outerRadius, sweepAngle, true);
   }
 }
 
@@ -366,14 +368,14 @@ void PomodoroActivity::renderPointer(const int centerX, const int centerY, const
   const float spread = 0.08f;
 
   const int xPoints[3] = {
-      centerX + static_cast<int>(std::round(cosA * tipRadius)),
-      centerX + static_cast<int>(std::round(std::cos(angle + spread) * baseRadius)),
-      centerX + static_cast<int>(std::round(std::cos(angle - spread) * baseRadius)),
+    centerX + static_cast<int>(std::round(cosA * tipRadius)),
+    centerX + static_cast<int>(std::round(std::cos(angle + spread) * baseRadius)),
+    centerX + static_cast<int>(std::round(std::cos(angle - spread) * baseRadius)),
   };
   const int yPoints[3] = {
-      centerY + static_cast<int>(std::round(sinA * tipRadius)),
-      centerY + static_cast<int>(std::round(std::sin(angle + spread) * baseRadius)),
-      centerY + static_cast<int>(std::round(std::sin(angle - spread) * baseRadius)),
+    centerY + static_cast<int>(std::round(sinA * tipRadius)),
+    centerY + static_cast<int>(std::round(std::sin(angle + spread) * baseRadius)),
+    centerY + static_cast<int>(std::round(std::sin(angle - spread) * baseRadius)),
   };
 
   renderer.fillPolygon(xPoints, yPoints, 3, state);
@@ -413,21 +415,17 @@ void PomodoroActivity::renderCenterReadout(const int centerX, const int centerY,
 }
 
 void PomodoroActivity::applyGrayscaleWedgeMask(const int centerX, const int centerY, const int outerRadius,
-                                               const int innerRadius, const int numberRadius, const float fraction,
-                                               const float pointerAngle) {
+                                               const int innerRadius, const float sweepAngle) {
   renderer.storeBwBuffer();
 
   renderer.clearScreen(0x00);
   renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
+  drawWedgeSolid(centerX, centerY, innerRadius, outerRadius, sweepAngle, false);
   renderer.copyGrayscaleLsbBuffers();
 
   renderer.clearScreen(0x00);
   renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
-  drawWedgeSolid(centerX, centerY, innerRadius, outerRadius, fraction, false);
-  renderDialTicks(centerX, centerY, outerRadius - 2, true);
-  renderDialNumerals(centerX, centerY, numberRadius, true);
-  renderPointer(centerX, centerY, outerRadius, pointerAngle, true);
-  renderCenterHub(centerX, centerY, true);
+  drawWedgeSolid(centerX, centerY, innerRadius, outerRadius, sweepAngle, false);
   renderer.copyGrayscaleMsbBuffers();
 
   renderer.displayGrayBuffer();
@@ -456,12 +454,12 @@ void PomodoroActivity::drawDitheredRadialLine(const int centerX, const int cente
 }
 
 void PomodoroActivity::drawWedgeSolid(const int centerX, const int centerY, const int innerRadius,
-                                      const int outerRadius, const float fraction, const bool state) {
-  if (fraction <= 0.0f) {
+                                      const int outerRadius, const float sweepAngle, const bool state) {
+  if (sweepAngle == 0.0f) {
     return;
   }
-  const float sweep = std::min(1.0f, fraction) * kTwoPi;
-  const int steps = std::max(1, static_cast<int>(std::round(sweep * 180.0f / kPi)));
+  const float sweep = std::max(-kTwoPi, std::min(kTwoPi, sweepAngle));
+  const int steps = std::max(1, static_cast<int>(std::round(std::abs(sweep) * 180.0f / kPi)));
   for (int i = 0; i <= steps; i++) {
     const float angle = kStartAngle + sweep * (static_cast<float>(i) / steps);
     const float cosA = std::cos(angle);
@@ -471,12 +469,12 @@ void PomodoroActivity::drawWedgeSolid(const int centerX, const int centerY, cons
 }
 
 void PomodoroActivity::drawWedgeDithered(const int centerX, const int centerY, const int innerRadius,
-                                         const int outerRadius, const float fraction) {
-  if (fraction <= 0.0f) {
+                                         const int outerRadius, const float sweepAngle) {
+  if (sweepAngle == 0.0f) {
     return;
   }
-  const float sweep = std::min(1.0f, fraction) * kTwoPi;
-  const int steps = std::max(1, static_cast<int>(std::round(sweep * 180.0f / kPi)));
+  const float sweep = std::max(-kTwoPi, std::min(kTwoPi, sweepAngle));
+  const int steps = std::max(1, static_cast<int>(std::round(std::abs(sweep) * 180.0f / kPi)));
   for (int i = 0; i <= steps; i++) {
     const float angle = kStartAngle + sweep * (static_cast<float>(i) / steps);
     const float cosA = std::cos(angle);

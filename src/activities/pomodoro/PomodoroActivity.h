@@ -1,9 +1,9 @@
 #pragma once
 
+#include <EInkDisplay.h>
+
 #include <functional>
 #include <string>
-
-#include <EInkDisplay.h>
 
 #include "../Activity.h"
 #include "PomodoroModel.h"
@@ -44,18 +44,17 @@ class PomodoroActivity final : public Activity {
   void persistDuration();
 
   void render(EInkDisplay::RefreshMode mode);
-  void renderDial(int centerX, int centerY, int outerRadius, int innerRadius, float fraction, bool dither);
+  void renderDial(int centerX, int centerY, int outerRadius, int innerRadius, float sweepAngle, bool dither);
   void renderDialTicks(int centerX, int centerY, int outerRadius, bool state);
   void renderDialNumerals(int centerX, int centerY, int numberRadius, bool state);
   void renderPointer(int centerX, int centerY, int outerRadius, float angle, bool state);
   void renderCenterHub(int centerX, int centerY, bool state);
   void renderCenterReadout(int centerX, int centerY, bool showSeconds, int displayValue);
-  void applyGrayscaleWedgeMask(int centerX, int centerY, int outerRadius, int innerRadius, int numberRadius,
-                               float fraction, float pointerAngle);
+  void applyGrayscaleWedgeMask(int centerX, int centerY, int outerRadius, int innerRadius, float sweepAngle);
 
   void drawRadialLine(int centerX, int centerY, float cosA, float sinA, int innerRadius, int outerRadius, bool state);
   void drawDitheredRadialLine(int centerX, int centerY, float cosA, float sinA, int innerRadius, int outerRadius,
                               int phase);
-  void drawWedgeSolid(int centerX, int centerY, int innerRadius, int outerRadius, float fraction, bool state);
-  void drawWedgeDithered(int centerX, int centerY, int innerRadius, int outerRadius, float fraction);
+  void drawWedgeSolid(int centerX, int centerY, int innerRadius, int outerRadius, float sweepAngle, bool state);
+  void drawWedgeDithered(int centerX, int centerY, int innerRadius, int outerRadius, float sweepAngle);
 };
