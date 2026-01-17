@@ -21,7 +21,7 @@ constexpr float kStartAngle = -kPi / 2.0f;
 constexpr unsigned long kQuitHoldMs = 1200;
 constexpr unsigned long kStatusMessageMs = 1500;
 constexpr unsigned long kFlashIntervalMs = 180;
-constexpr int kFlashCycles = 5;
+constexpr int kFlashToggles = 3;
 constexpr int kPointerInset = 6;
 constexpr int kPointerTip = 2;
 constexpr int kHubRadius = 4;
@@ -288,7 +288,7 @@ void PomodoroActivity::loop() {
   if (flashActive) {
     if (mappedInput.wasAnyPressed() || mappedInput.wasAnyReleased()) {
       flashActive = false;
-      requestRender(EInkDisplay::FULL_REFRESH);
+      requestRender(EInkDisplay::FAST_REFRESH);
       return;
     }
 
@@ -299,7 +299,7 @@ void PomodoroActivity::loop() {
       nextFlashMs = nowMs + kFlashIntervalMs;
       if (flashRemainingToggles <= 0) {
         flashActive = false;
-        requestRender(EInkDisplay::FULL_REFRESH);
+        requestRender(EInkDisplay::FAST_REFRESH);
       }
     }
     return;
@@ -326,7 +326,7 @@ void PomodoroActivity::loop() {
       sessionStartEpoch = getNowEpochSeconds();
       model.start(nowMs);
       flashActive = true;
-      flashRemainingToggles = kFlashCycles * 2;
+      flashRemainingToggles = kFlashToggles;
       nextFlashMs = nowMs;
       return;
     }
@@ -369,7 +369,7 @@ void PomodoroActivity::loop() {
     logPomodoroCompletion(getNowEpochSeconds());
     sessionStartEpoch = 0;
     flashActive = true;
-    flashRemainingToggles = kFlashCycles * 2;
+    flashRemainingToggles = kFlashToggles;
     nextFlashMs = nowMs;
     return;
   }
