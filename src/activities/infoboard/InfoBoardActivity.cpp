@@ -4,6 +4,7 @@
 #include <ArduinoJson.h>
 #include <GfxRenderer.h>
 
+#include <deque>
 #include <cstring>
 #include <vector>
 
@@ -82,16 +83,42 @@ void InfoBoardActivity::handleSerialInput() {
       std::string message(buffer, bufferLen);
       bufferLen = 0;
 
-      if (message != lastMessage) {
-        lastMessage = message;
-        RenderMode mode = RenderMode::Centered;
-        std::string text = message;
-        const bool isJson = tryParseJsonMessage(message, text, mode);
-        if (mode == RenderMode::Console) {
-          renderConsoleMessage(text, EInkDisplay::FAST_REFRESH);
-        } else {
-          renderCenteredMessage(text, EInkDisplay::FAST_REFRESH, !isJson);
+      bool append = false;
+      bool finalRender = true;
+      bool clear = false;
+      RenderMode mode = RenderMode::Centered;
+      std::string text = message;
+      const bool isJson = tryParseJsonMessage(message, text, mode, append, finalRender, clear);
+
+      if (!isJson && message == lastMessage) {
+        continue;
+      }
+      lastMessage = message;
+
+      if (mode == RenderMode::Console) {
+        if (clear) {
+          consoleBuffer.clear();
         }
+        if (append) {
+          consoleBuffer.append(text);
+        } else if (!text.empty() || !clear) {
+          consoleBuffer = text;
+        }
+
+        if (consoleBuffer.size() > MAX_CONSOLE_BUFFER) {
+          size_t start = consoleBuffer.size() - MAX_CONSOLE_BUFFER;
+          const size_t newline = consoleBuffer.find('\n', start);
+          if (newline != std::string::npos && newline + 1 < consoleBuffer.size()) {
+            start = newline + 1;
+          }
+          consoleBuffer.erase(0, start);
+        }
+
+        if (finalRender) {
+          renderConsoleMessage(consoleBuffer, EInkDisplay::FAST_REFRESH);
+        }
+      } else {
+        renderCenteredMessage(text, EInkDisplay::FAST_REFRESH, !isJson);
       }
       continue;
     }
@@ -110,29 +137,38 @@ void InfoBoardActivity::handleSerialInput() {
 }
 
 bool InfoBoardActivity::tryParseJsonMessage(const std::string& message, std::string& outText,
-                                            InfoBoardActivity::RenderMode& outMode) const {
+                                            InfoBoardActivity::RenderMode& outMode, bool& outAppend, bool& outFinal,
+                                            bool& outClear) const {
   if (message.empty() || message.front() != '{') {
     return false;
   }
 
-  DynamicJsonDocument doc(message.size() + 256);
+  JsonDocument doc;
   const auto error = deserializeJson(doc, message);
   if (error) {
     return false;
   }
 
   bool console = false;
-  if (doc.containsKey("mode")) {
-    const char* mode = doc["mode"] | "";
-    console = (strcmp(mode, "console") == 0);
+  const char* mode = doc["mode"] | "";
+  if (strcmp(mode, "console") == 0) {
+    console = true;
   }
-  if (doc.containsKey("console")) {
+  if (doc["console"].is<bool>()) {
     console = doc["console"].as<bool>();
   }
 
   const char* text = doc["text"] | "";
   outText = text;
   outMode = console ? RenderMode::Console : RenderMode::Centered;
+
+  outAppend = doc["append"].is<bool>() && doc["append"].as<bool>();
+  outClear = doc["clear"].is<bool>() && doc["clear"].as<bool>();
+  if (doc["final"].is<bool>()) {
+    outFinal = doc["final"].as<bool>();
+  } else {
+    outFinal = !outAppend;
+  }
   return true;
 }
 
@@ -274,8 +310,7 @@ void InfoBoardActivity::renderConsoleMessage(const std::string& message, EInkDis
     maxLines = 1;
   }
 
-  std::vector<std::string> lines;
-  lines.reserve(static_cast<size_t>(maxLines));
+  std::deque<std::string> lines;
 
   std::string normalized = message;
   for (auto& ch : normalized) {
@@ -291,6 +326,9 @@ void InfoBoardActivity::renderConsoleMessage(const std::string& message, EInkDis
 
     if (line.empty()) {
       lines.emplace_back("");
+      if (lines.size() > static_cast<size_t>(maxLines)) {
+        lines.pop_front();
+      }
     } else {
       std::string segment;
       segment.reserve(line.size());
@@ -300,8 +338,8 @@ void InfoBoardActivity::renderConsoleMessage(const std::string& message, EInkDis
           segment.pop_back();
           if (!segment.empty()) {
             lines.push_back(segment);
-            if (lines.size() >= static_cast<size_t>(maxLines)) {
-              break;
+            if (lines.size() > static_cast<size_t>(maxLines)) {
+              lines.pop_front();
             }
             segment.clear();
           }
@@ -309,20 +347,20 @@ void InfoBoardActivity::renderConsoleMessage(const std::string& message, EInkDis
           if (renderer.getTextWidth(fontId, segment.c_str()) > maxWidth) {
             lines.push_back(segment);
             segment.clear();
-            if (lines.size() >= static_cast<size_t>(maxLines)) {
-              break;
+            if (lines.size() > static_cast<size_t>(maxLines)) {
+              lines.pop_front();
             }
           }
         }
       }
-      if (!segment.empty() && lines.size() < static_cast<size_t>(maxLines)) {
+      if (!segment.empty()) {
         lines.push_back(segment);
+        if (lines.size() > static_cast<size_t>(maxLines)) {
+          lines.pop_front();
+        }
       }
     }
 
-    if (lines.size() >= static_cast<size_t>(maxLines)) {
-      break;
-    }
     if (end == std::string::npos) {
       break;
     }

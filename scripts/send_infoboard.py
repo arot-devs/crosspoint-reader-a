@@ -47,6 +47,9 @@ def main() -> int:
     parser.add_argument("--delay", type=float, default=0.5, help="Seconds to wait after opening port")
     parser.add_argument("--list", action="store_true", help="List available serial ports and exit")
     parser.add_argument("--console", action="store_true", help="Send message as InfoBoard console JSON payload")
+    parser.add_argument("--append", action="store_true", help="Append text to console buffer (JSON)")
+    parser.add_argument("--final", action="store_true", help="Render immediately when using JSON append/clear")
+    parser.add_argument("--clear", action="store_true", help="Clear console buffer before applying text (JSON)")
     args = parser.parse_args()
 
     if args.list:
@@ -76,12 +79,21 @@ def main() -> int:
                 sys.exit("No serial ports detected. Use --list to view ports.")
             sys.exit("Multiple serial ports detected. Pass one explicitly or use --list.")
 
-    if message is None:
+    if message is None and args.clear:
+        message = ""
+    elif message is None:
         message = sys.stdin.readline().rstrip("\n")
 
     payload_message = message
-    if args.console:
-        payload_message = json.dumps({"mode": "console", "text": message})
+    if args.console or args.append or args.clear or args.final:
+        payload: dict[str, object] = {"mode": "console", "text": message}
+        if args.append:
+            payload["append"] = True
+        if args.clear:
+            payload["clear"] = True
+        if args.final:
+            payload["final"] = True
+        payload_message = json.dumps(payload)
 
     with serial.Serial(port, args.baud, timeout=1) as ser:
         if args.delay > 0:

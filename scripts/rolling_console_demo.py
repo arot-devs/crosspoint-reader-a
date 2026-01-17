@@ -51,7 +51,7 @@ LOG_TEMPLATES = [
     ("INFO", "Idle until next update"),
 ]
 
-MAX_PAYLOAD_BYTES = 2048
+MAX_PAYLOAD_BYTES = 10240
 
 
 def format_log_line(counter: int, start_time: float) -> str:

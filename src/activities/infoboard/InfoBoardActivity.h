@@ -9,15 +9,18 @@
 
 class InfoBoardActivity final : public Activity {
   enum class RenderMode { Centered, Console };
-  static constexpr size_t MAX_PAYLOAD_SIZE = 2048;
+  static constexpr size_t MAX_PAYLOAD_SIZE = 10240;
+  static constexpr size_t MAX_CONSOLE_BUFFER = MAX_PAYLOAD_SIZE;
 
   const std::function<void()> onGoHome;
   char buffer[MAX_PAYLOAD_SIZE + 1] = {0};
   size_t bufferLen = 0;
   bool discarding = false;
   std::string lastMessage;
+  std::string consoleBuffer;
 
-  bool tryParseJsonMessage(const std::string& message, std::string& outText, RenderMode& outMode) const;
+  bool tryParseJsonMessage(const std::string& message, std::string& outText, RenderMode& outMode, bool& outAppend,
+                           bool& outFinal, bool& outClear) const;
   void renderCenteredMessage(const std::string& message, EInkDisplay::RefreshMode refreshMode, bool decodeEscapes);
   void renderConsoleMessage(const std::string& message, EInkDisplay::RefreshMode refreshMode);
   void renderStatus(const char* message);
