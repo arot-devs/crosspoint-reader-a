@@ -51,6 +51,8 @@ LOG_TEMPLATES = [
     ("INFO", "Idle until next update"),
 ]
 
+MAX_PAYLOAD_BYTES = 2048
+
 
 def format_log_line(counter: int, start_time: float) -> str:
     timestamp = time.strftime("%H:%M:%S", time.localtime(start_time + counter))
@@ -75,6 +77,56 @@ def build_payload(text: str) -> str:
     return json.dumps({"mode": "console", "text": text})
 
 
+def payload_bytes(text: str) -> bytes:
+    return build_payload(text).encode("utf-8")
+
+
+def truncate_line_to_fit(line: str, max_bytes: int) -> str:
+    if not line or max_bytes <= 0:
+        return ""
+    suffix = "..."
+    low = 0
+    high = len(line)
+    best = ""
+    while low <= high:
+        mid = (low + high) // 2
+        candidate = line[:mid]
+        if mid < len(line):
+            candidate = candidate.rstrip() + suffix
+        if len(payload_bytes(candidate)) <= max_bytes:
+            best = candidate
+            low = mid + 1
+        else:
+            high = mid - 1
+    return best
+
+
+def trim_buffer_to_fit(buffer: deque[str], max_bytes: int) -> bool:
+    trimmed = False
+    if max_bytes <= 0:
+        return trimmed
+    while len(buffer) > 1 and len(payload_bytes("\n".join(buffer))) > max_bytes:
+        buffer.popleft()
+        trimmed = True
+    if buffer and len(payload_bytes(buffer[-1])) > max_bytes:
+        buffer[-1] = truncate_line_to_fit(buffer[-1], max_bytes)
+        trimmed = True
+    return trimmed
+
+
+def write_payload(ser: serial.Serial, payload: bytes, chunk_size: int, chunk_delay: float) -> None:
+    packet = payload + b"\n"
+    if chunk_size <= 0:
+        ser.write(packet)
+        ser.flush()
+        return
+    for offset in range(0, len(packet), chunk_size):
+        ser.write(packet[offset : offset + chunk_size])
+        if chunk_delay > 0 and offset + chunk_size < len(packet):
+            time.sleep(chunk_delay)
+    ser.flush()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Stream a rolling console log to the InfoBoard display."
@@ -85,7 +137,30 @@ def main() -> int:
     parser.add_argument("--delay", type=float, default=0.5, help="Seconds to wait after opening port")
     parser.add_argument("--duration", type=float, default=30, help="Seconds to run (default: 30)")
     parser.add_argument("--interval", type=float, default=1, help="Seconds between lines (default: 1)")
-    parser.add_argument("--lines", type=int, default=20, help="Lines to keep in view (default: 20)")
+    parser.add_argument(
+        "--lines",
+        type=int,
+        default=20,
+        help="Lines to keep in view (match display capacity; default: 20)",
+    )
+    parser.add_argument(
+        "--max-bytes",
+        type=int,
+        default=MAX_PAYLOAD_BYTES,
+        help=f"Max JSON payload size before trimming (default: {MAX_PAYLOAD_BYTES})",
+    )
+    parser.add_argument(
+        "--chunk-size",
+        type=int,
+        default=0,
+        help="Write payload in chunks to avoid UART overflow (0 disables)",
+    )
+    parser.add_argument(
+        "--chunk-delay",
+        type=float,
+        default=0.01,
+        help="Seconds to sleep between chunks (default: 0.01)",
+    )
     parser.add_argument("--list", action="store_true", help="List available serial ports and exit")
     args = parser.parse_args()
 
@@ -105,6 +180,12 @@ def main() -> int:
         sys.exit("Interval must be > 0 seconds.")
     if args.lines <= 0:
         sys.exit("Lines must be > 0.")
+    if args.max_bytes < 0:
+        sys.exit("Max bytes must be >= 0.")
+    if args.chunk_size < 0:
+        sys.exit("Chunk size must be >= 0.")
+    if args.chunk_delay < 0:
+        sys.exit("Chunk delay must be >= 0.")
 
     ports = detect_ports()
     port = args.port_override or args.port
@@ -123,18 +204,22 @@ def main() -> int:
     with serial.Serial(port, args.baud, timeout=1) as ser:
         if args.delay > 0:
             time.sleep(args.delay)
-        buffer = deque([""] * args.lines, maxlen=args.lines)
+        buffer = deque(maxlen=args.lines)
         start_time = time.time()
         line_index = 0
+        warned_trim = False
         while True:
             next_tick = start_time + (line_index * args.interval)
             if next_tick - start_time >= args.duration:
                 break
             log_line = format_log_line(line_index, start_time)
             buffer.append(log_line)
-            payload = build_payload("\n".join(buffer)) + "\n"
-            ser.write(payload.encode("utf-8"))
-            ser.flush()
+            trimmed = trim_buffer_to_fit(buffer, args.max_bytes)
+            if trimmed and not warned_trim:
+                print("Trimmed payload to fit max bytes; reduce --lines or --max-bytes for full history.")
+                warned_trim = True
+            payload = payload_bytes("\n".join(buffer))
+            write_payload(ser, payload, args.chunk_size, args.chunk_delay)
             line_index += 1
             sleep_for = max(0.0, next_tick + args.interval - time.time())
             time.sleep(sleep_for)
