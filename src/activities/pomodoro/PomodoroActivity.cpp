@@ -536,7 +536,8 @@ void PomodoroActivity::renderDialNumerals(const int centerX, const int centerY, 
                                           const bool state) {
   for (int i = 0; i < 12; i++) {
     const int minutes = i * 5;
-    const std::string label = std::to_string(minutes);
+    const int labelMinutes = (60 - minutes) % 60;
+    const std::string label = std::to_string(labelMinutes);
     const float angle = kStartAngle + (static_cast<float>(minutes) / 60.0f) * kTwoPi;
     const float cosA = std::cos(angle);
     const float sinA = std::sin(angle);
