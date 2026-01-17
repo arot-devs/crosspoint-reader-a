@@ -40,6 +40,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Send a single InfoBoard line over USB serial.")
     parser.add_argument("port", nargs="?", help="Serial port (e.g. /dev/ttyACM0 or COM3)")
     parser.add_argument("message", nargs="?", help="Message to send. If omitted, read one line from stdin.")
+    parser.add_argument("--port", dest="port_override", help="Serial port (overrides positional port)")
+    parser.add_argument("--message", dest="message_override", help="Message to send (overrides positional message)")
     parser.add_argument("--baud", type=int, default=115200, help="Baud rate (default: 115200)")
     parser.add_argument("--delay", type=float, default=0.5, help="Seconds to wait after opening port")
     parser.add_argument("--list", action="store_true", help="List available serial ports and exit")
@@ -55,16 +57,23 @@ def main() -> int:
                 print(f"  {port}")
         return 0
 
-    port = args.port
+    ports = detect_ports()
+    port = args.port_override or args.port
+    message = args.message_override or args.message
+
+    if port and message is None:
+        # Single positional: treat as message if it doesn't match a detected port.
+        if port not in ports:
+            message = port
+            port = None
+
     if not port:
-        ports = detect_ports()
         port = pick_default_port(ports)
         if not port:
             if not ports:
                 sys.exit("No serial ports detected. Use --list to view ports.")
             sys.exit("Multiple serial ports detected. Pass one explicitly or use --list.")
 
-    message = args.message
     if message is None:
         message = sys.stdin.readline().rstrip("\n")
 
