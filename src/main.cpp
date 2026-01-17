@@ -17,6 +17,7 @@
 #include "activities/boot_sleep/SleepActivity.h"
 #include "activities/browser/OpdsBookBrowserActivity.h"
 #include "activities/home/HomeActivity.h"
+#include "activities/infoboard/InfoBoardActivity.h"
 #include "activities/network/CrossPointWebServerActivity.h"
 #include "activities/reader/ReaderActivity.h"
 #include "activities/settings/SettingsActivity.h"
@@ -232,10 +233,15 @@ void onGoToBrowser() {
   enterNewActivity(new OpdsBookBrowserActivity(renderer, mappedInputManager, onGoHome));
 }
 
+void onGoToInfoBoard() {
+  exitActivity();
+  enterNewActivity(new InfoBoardActivity(renderer, mappedInputManager, onGoHome));
+}
+
 void onGoHome() {
   exitActivity();
   enterNewActivity(new HomeActivity(renderer, mappedInputManager, onContinueReading, onGoToReaderHome, onGoToSettings,
-                                    onGoToFileTransfer, onGoToBrowser));
+                                    onGoToFileTransfer, onGoToInfoBoard, onGoToBrowser));
 }
 
 void setupDisplayAndFonts() {
