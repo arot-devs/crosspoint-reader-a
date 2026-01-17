@@ -69,6 +69,14 @@ def build_console_payload(text: str, clear: bool = True) -> str:
 
 
 def get_process_stats(top_n: int) -> list[dict[str, object]]:
+    def percent_or_zero(value: object | None) -> float:
+        if value is None:
+            return 0.0
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return 0.0
+
     processes = []
     for proc in psutil.process_iter(["pid", "name", "cpu_percent", "memory_percent"]):
         try:
@@ -77,7 +85,10 @@ def get_process_stats(top_n: int) -> list[dict[str, object]]:
             continue
         processes.append(info)
 
-    processes.sort(key=lambda p: p.get("cpu_percent", 0.0), reverse=True)
+    processes.sort(
+        key=lambda p: percent_or_zero(p.get("cpu_percent")),
+        reverse=True,
+    )
     return processes[:top_n]
 
 
