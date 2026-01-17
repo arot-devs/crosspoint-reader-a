@@ -1,8 +1,10 @@
 #include "InfoBoardActivity.h"
 
 #include <Arduino.h>
+#include <ArduinoJson.h>
 #include <GfxRenderer.h>
 
+#include <cstring>
 #include <vector>
 
 #include "MappedInputManager.h"
@@ -50,7 +52,7 @@ void InfoBoardActivity::loop() {
 }
 
 void InfoBoardActivity::renderStatus(const char* message) {
-  renderMessage(message, EInkDisplay::FAST_REFRESH);
+  renderCenteredMessage(message, EInkDisplay::FAST_REFRESH, false);
 }
 
 void InfoBoardActivity::handleSerialInput() {
@@ -82,7 +84,14 @@ void InfoBoardActivity::handleSerialInput() {
 
       if (message != lastMessage) {
         lastMessage = message;
-        renderMessage(message, EInkDisplay::FAST_REFRESH);
+        RenderMode mode = RenderMode::Centered;
+        std::string text = message;
+        const bool isJson = tryParseJsonMessage(message, text, mode);
+        if (mode == RenderMode::Console) {
+          renderConsoleMessage(text, EInkDisplay::FAST_REFRESH);
+        } else {
+          renderCenteredMessage(text, EInkDisplay::FAST_REFRESH, !isJson);
+        }
       }
       continue;
     }
@@ -100,7 +109,35 @@ void InfoBoardActivity::handleSerialInput() {
   }
 }
 
-void InfoBoardActivity::renderMessage(const std::string& message, EInkDisplay::RefreshMode refreshMode) {
+bool InfoBoardActivity::tryParseJsonMessage(const std::string& message, std::string& outText,
+                                            InfoBoardActivity::RenderMode& outMode) const {
+  if (message.empty() || message.front() != '{') {
+    return false;
+  }
+
+  DynamicJsonDocument doc(message.size() + 256);
+  const auto error = deserializeJson(doc, message);
+  if (error) {
+    return false;
+  }
+
+  bool console = false;
+  if (doc.containsKey("mode")) {
+    const char* mode = doc["mode"] | "";
+    console = (strcmp(mode, "console") == 0);
+  }
+  if (doc.containsKey("console")) {
+    console = doc["console"].as<bool>();
+  }
+
+  const char* text = doc["text"] | "";
+  outText = text;
+  outMode = console ? RenderMode::Console : RenderMode::Centered;
+  return true;
+}
+
+void InfoBoardActivity::renderCenteredMessage(const std::string& message, EInkDisplay::RefreshMode refreshMode,
+                                              const bool decodeEscapes) {
   renderer.clearScreen();
 
   const int screenWidth = renderer.getScreenWidth();
@@ -120,7 +157,7 @@ void InfoBoardActivity::renderMessage(const std::string& message, EInkDisplay::R
   std::vector<std::string> lines;
   lines.reserve(static_cast<size_t>(maxLines));
 
-  const std::string normalized = decodeEscapedNewlines(message);
+  const std::string normalized = decodeEscapes ? decodeEscapedNewlines(message) : message;
   size_t start = 0;
   while (start <= normalized.size()) {
     const size_t end = normalized.find('\n', start);
@@ -212,6 +249,93 @@ void InfoBoardActivity::renderMessage(const std::string& message, EInkDisplay::R
   for (const auto& line : lines) {
     renderer.drawCenteredText(fontId, startY, line.c_str());
     startY += lineHeight;
+  }
+
+  const auto labels = mappedInput.mapLabels("Back", "", "", "");
+  renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+
+  renderer.displayBuffer(refreshMode);
+}
+
+void InfoBoardActivity::renderConsoleMessage(const std::string& message, EInkDisplay::RefreshMode refreshMode) {
+  renderer.clearScreen();
+
+  const int screenWidth = renderer.getScreenWidth();
+  const int screenHeight = renderer.getScreenHeight();
+  constexpr int margin = 20;
+  constexpr int bottomMargin = 40;
+
+  const int fontId = UI_12_FONT_ID;
+  const int lineHeight = renderer.getLineHeight(fontId);
+  const int maxWidth = screenWidth - margin * 2;
+  const int maxHeight = screenHeight - margin - bottomMargin;
+  int maxLines = maxHeight / lineHeight;
+  if (maxLines < 1) {
+    maxLines = 1;
+  }
+
+  std::vector<std::string> lines;
+  lines.reserve(static_cast<size_t>(maxLines));
+
+  std::string normalized = message;
+  for (auto& ch : normalized) {
+    if (ch == '\r') {
+      ch = '\n';
+    }
+  }
+
+  size_t start = 0;
+  while (start <= normalized.size()) {
+    const size_t end = normalized.find('\n', start);
+    std::string line = normalized.substr(start, end == std::string::npos ? std::string::npos : end - start);
+
+    if (line.empty()) {
+      lines.emplace_back("");
+    } else {
+      std::string segment;
+      segment.reserve(line.size());
+      for (const char ch : line) {
+        segment.push_back(ch);
+        if (renderer.getTextWidth(fontId, segment.c_str()) > maxWidth) {
+          segment.pop_back();
+          if (!segment.empty()) {
+            lines.push_back(segment);
+            if (lines.size() >= static_cast<size_t>(maxLines)) {
+              break;
+            }
+            segment.clear();
+          }
+          segment.push_back(ch);
+          if (renderer.getTextWidth(fontId, segment.c_str()) > maxWidth) {
+            lines.push_back(segment);
+            segment.clear();
+            if (lines.size() >= static_cast<size_t>(maxLines)) {
+              break;
+            }
+          }
+        }
+      }
+      if (!segment.empty() && lines.size() < static_cast<size_t>(maxLines)) {
+        lines.push_back(segment);
+      }
+    }
+
+    if (lines.size() >= static_cast<size_t>(maxLines)) {
+      break;
+    }
+    if (end == std::string::npos) {
+      break;
+    }
+    start = end + 1;
+  }
+
+  int y = margin;
+  for (const auto& line : lines) {
+    renderer.drawText(fontId, margin, y, line.c_str());
+    y += lineHeight;
+    if (y + lineHeight > screenHeight - bottomMargin) {
+      break;
+    }
   }
 
   const auto labels = mappedInput.mapLabels("Back", "", "", "");

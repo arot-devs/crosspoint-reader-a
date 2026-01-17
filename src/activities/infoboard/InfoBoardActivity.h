@@ -8,6 +8,7 @@
 #include "../Activity.h"
 
 class InfoBoardActivity final : public Activity {
+  enum class RenderMode { Centered, Console };
   static constexpr size_t MAX_PAYLOAD_SIZE = 2048;
 
   const std::function<void()> onGoHome;
@@ -16,7 +17,9 @@ class InfoBoardActivity final : public Activity {
   bool discarding = false;
   std::string lastMessage;
 
-  void renderMessage(const std::string& message, EInkDisplay::RefreshMode refreshMode);
+  bool tryParseJsonMessage(const std::string& message, std::string& outText, RenderMode& outMode) const;
+  void renderCenteredMessage(const std::string& message, EInkDisplay::RefreshMode refreshMode, bool decodeEscapes);
+  void renderConsoleMessage(const std::string& message, EInkDisplay::RefreshMode refreshMode);
   void renderStatus(const char* message);
   void handleSerialInput();
 
