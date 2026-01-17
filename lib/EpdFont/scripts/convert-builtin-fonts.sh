@@ -8,13 +8,14 @@ READER_FONT_STYLES=("Regular" "Italic" "Bold" "BoldItalic")
 BOOKERLY_FONT_SIZES=(12 14 16 18)
 NOTOSANS_FONT_SIZES=(12 14 16 18)
 OPENDYSLEXIC_FONT_SIZES=(8 10 12 14)
+NOTO_MATH_FONT_PATH="../builtinFonts/source/NotoSansMath/NotoSansMath-Regular.ttf"
 
 for size in ${BOOKERLY_FONT_SIZES[@]}; do
   for style in ${READER_FONT_STYLES[@]}; do
     font_name="bookerly_${size}_$(echo $style | tr '[:upper:]' '[:lower:]')"
     font_path="../builtinFonts/source/Bookerly/Bookerly-${style}.ttf"
     output_path="../builtinFonts/${font_name}.h"
-    python fontconvert.py $font_name $size $font_path --2bit > $output_path
+    python fontconvert.py $font_name $size $font_path "$NOTO_MATH_FONT_PATH" --2bit > $output_path
     echo "Generated $output_path"
   done
 done
@@ -52,4 +53,4 @@ for size in ${UI_FONT_SIZES[@]}; do
   done
 done
 
-python fontconvert.py notosans_8_regular 8 ../builtinFonts/source/NotoSans/NotoSans-Regular.ttf > ../builtinFonts/notosans_8_regular.h
+python fontconvert.py notosans_8_regular 8 ../builtinFonts/source/NotoSans/NotoSans-Regular.ttf "$NOTO_MATH_FONT_PATH" > ../builtinFonts/notosans_8_regular.h
