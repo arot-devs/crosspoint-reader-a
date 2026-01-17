@@ -3,7 +3,6 @@ import argparse
 import json
 import sys
 import time
-from typing import Iterable
 
 try:
     import psutil
@@ -58,13 +57,16 @@ def bar(percent: float, width: int = 16) -> str:
 def safe_name(name: str, max_len: int) -> str:
     if len(name) <= max_len:
         return name
-    return name[: max_len - 1] + "…" if max_len > 1 else name[:max_len]
+    if max_len <= 3:
+        return name[:max_len]
+    return name[: max_len - 3] + "..."
 
-
-def build_console_payload(text: str, clear: bool = True) -> str:
-    payload: dict[str, object] = {"mode": "console", "text": text, "final": True}
+def build_console_payload(text: str, clear: bool = False, final: bool = False) -> str:
+    payload: dict[str, object] = {"mode": "console", "append": True, "text": text}
     if clear:
         payload["clear"] = True
+    if final:
+        payload["final"] = True
     return json.dumps(payload)
 
 
@@ -148,6 +150,12 @@ def main() -> int:
     parser.add_argument("--interval", type=float, default=1.0, help="Seconds between updates (default: 1.0)")
     parser.add_argument("--duration", type=float, default=0, help="Seconds to run (0 = forever)")
     parser.add_argument("--top", type=int, default=5, help="Number of top processes to show (default: 5)")
+    parser.add_argument(
+        "--batch-delay",
+        type=float,
+        default=0.01,
+        help="Seconds to wait between line writes (default: 0.01)",
+    )
     parser.add_argument("--list", action="store_true", help="List available serial ports and exit")
     args = parser.parse_args()
 
@@ -167,6 +175,8 @@ def main() -> int:
         sys.exit("Top must be > 0.")
     if args.duration < 0:
         sys.exit("Duration must be >= 0.")
+    if args.batch_delay < 0:
+        sys.exit("Batch delay must be >= 0.")
 
     ports = detect_ports()
     port = args.port_override or args.port
@@ -184,8 +194,16 @@ def main() -> int:
             time.sleep(args.delay)
         while True:
             screen = render_screen(args.top)
-            payload = build_console_payload(screen)
-            ser.write((payload + "\n").encode("utf-8"))
+            lines = screen.split("\n")
+            for idx, line in enumerate(lines):
+                payload = build_console_payload(
+                    line + "\n",
+                    clear=(idx == 0),
+                    final=(idx == len(lines) - 1),
+                )
+                ser.write((payload + "\n").encode("utf-8"))
+                if args.batch_delay > 0:
+                    time.sleep(args.batch_delay)
             ser.flush()
             if args.duration and (time.time() - start_time) >= args.duration:
                 break
