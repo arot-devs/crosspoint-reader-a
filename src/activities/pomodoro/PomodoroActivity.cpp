@@ -24,7 +24,7 @@ constexpr unsigned long kFlashIntervalMs = 180;
 constexpr int kFlashToggles = 3;
 constexpr int kPointerInset = 6;
 constexpr int kPointerTip = 2;
-constexpr int kHubRadius = 4;
+constexpr int kHubRadius = 3;
 constexpr int kOuterPadding = 12;
 constexpr int kNumberInset = 18;
 constexpr int kTickMajorLength = 12;
@@ -573,15 +573,10 @@ void PomodoroActivity::renderPointer(const int centerX, const int centerY, const
 }
 
 void PomodoroActivity::renderCenterHub(const int centerX, const int centerY, const bool state) {
-  const int points = 12;
-  int xPoints[points];
-  int yPoints[points];
-  for (int i = 0; i < points; i++) {
-    const float angle = (static_cast<float>(i) / points) * kTwoPi;
-    xPoints[i] = centerX + static_cast<int>(std::round(std::cos(angle) * kHubRadius));
-    yPoints[i] = centerY + static_cast<int>(std::round(std::sin(angle) * kHubRadius));
+  if (!state) {
+    return;
   }
-  renderer.fillPolygon(xPoints, yPoints, points, state);
+  drawDitheredDisk(centerX, centerY, kHubRadius);
 }
 
 void PomodoroActivity::renderCenterReadout(const int centerX, const int centerY, const bool showSeconds,
@@ -602,6 +597,18 @@ void PomodoroActivity::renderCenterReadout(const int centerX, const int centerY,
   if (model.getState() == PomodoroState::Paused) {
     const int pausedY = topY - renderer.getLineHeight(UI_10_FONT_ID) - 4;
     renderer.drawCenteredText(UI_10_FONT_ID, pausedY, "PAUSED", true, EpdFontFamily::BOLD);
+  }
+}
+
+void PomodoroActivity::drawDitheredDisk(const int centerX, const int centerY, const int radius) {
+  for (int y = -radius; y <= radius; y++) {
+    for (int x = -radius; x <= radius; x++) {
+      if ((x * x + y * y) <= radius * radius) {
+        if (((x + y + radius) % kDitherModulo) < kDitherThreshold) {
+          renderer.drawPixel(centerX + x, centerY + y, true);
+        }
+      }
+    }
   }
 }
 

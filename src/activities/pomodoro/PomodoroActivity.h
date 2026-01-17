@@ -64,6 +64,7 @@ class PomodoroActivity final : public Activity {
   void renderPointer(int centerX, int centerY, int outerRadius, float angle, bool state);
   void renderCenterHub(int centerX, int centerY, bool state);
   void renderCenterReadout(int centerX, int centerY, bool showSeconds, int displayValue);
+  void drawDitheredDisk(int centerX, int centerY, int radius);
   void drawRadialLine(int centerX, int centerY, float cosA, float sinA, int innerRadius, int outerRadius, bool state);
   void drawDitheredRadialLine(int centerX, int centerY, float cosA, float sinA, int innerRadius, int outerRadius,
                               int phase);
