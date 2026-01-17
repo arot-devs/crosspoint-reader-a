@@ -19,6 +19,7 @@
 #include "activities/home/HomeActivity.h"
 #include "activities/infoboard/InfoBoardActivity.h"
 #include "activities/network/CrossPointWebServerActivity.h"
+#include "activities/pomodoro/PomodoroActivity.h"
 #include "activities/reader/ReaderActivity.h"
 #include "activities/settings/SettingsActivity.h"
 #include "activities/util/FullScreenMessageActivity.h"
@@ -186,10 +187,15 @@ void onGoToInfoBoard() {
   enterNewActivity(new InfoBoardActivity(renderer, mappedInputManager, onGoHome));
 }
 
+void onGoToPomodoro() {
+  exitActivity();
+  enterNewActivity(new PomodoroActivity(renderer, mappedInputManager, onGoHome));
+}
+
 void onGoHome() {
   exitActivity();
   enterNewActivity(new HomeActivity(renderer, mappedInputManager, onContinueReading, onGoToReaderHome, onGoToSettings,
-                                    onGoToFileTransfer, onGoToInfoBoard, onGoToBrowser));
+                                    onGoToFileTransfer, onGoToInfoBoard, onGoToPomodoro, onGoToBrowser));
 }
 
 void setupDisplayAndFonts() {

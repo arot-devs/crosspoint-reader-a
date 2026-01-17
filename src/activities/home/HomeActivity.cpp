@@ -23,7 +23,7 @@ void HomeActivity::taskTrampoline(void* param) {
 }
 
 int HomeActivity::getMenuItemCount() const {
-  int count = 4;  // Browse files, File transfer, InfoBoard, Settings
+  int count = 5;  // Browse files, File transfer, InfoBoard, Pomodoro, Settings
   if (hasContinueReading) count++;
   if (hasOpdsUrl) count++;
   return count;
@@ -173,6 +173,7 @@ void HomeActivity::loop() {
     const int opdsLibraryIdx = hasOpdsUrl ? idx++ : -1;
     const int fileTransferIdx = idx++;
     const int infoBoardIdx = idx++;
+    const int pomodoroIdx = idx++;
     const int settingsIdx = idx;
 
     if (selectorIndex == continueIdx) {
@@ -185,6 +186,8 @@ void HomeActivity::loop() {
       onFileTransferOpen();
     } else if (selectorIndex == infoBoardIdx) {
       onInfoBoardOpen();
+    } else if (selectorIndex == pomodoroIdx) {
+      onPomodoroOpen();
     } else if (selectorIndex == settingsIdx) {
       onSettingsOpen();
     }
@@ -298,18 +301,18 @@ void HomeActivity::render() {
         const int centerX = bookmarkX + bookmarkWidth / 2;
 
         const int xPoints[5] = {
-            bookmarkX,                  // top-left
-            bookmarkX + bookmarkWidth,  // top-right
-            bookmarkX + bookmarkWidth,  // bottom-right
-            centerX,                    // center notch point
-            bookmarkX                   // bottom-left
+          bookmarkX,                  // top-left
+          bookmarkX + bookmarkWidth,  // top-right
+          bookmarkX + bookmarkWidth,  // bottom-right
+          centerX,                    // center notch point
+          bookmarkX                   // bottom-left
         };
         const int yPoints[5] = {
-            bookmarkY,                                // top-left
-            bookmarkY,                                // top-right
-            bookmarkY + bookmarkHeight,               // bottom-right
-            bookmarkY + bookmarkHeight - notchDepth,  // center notch point
-            bookmarkY + bookmarkHeight                // bottom-left
+          bookmarkY,                                // top-left
+          bookmarkY,                                // top-right
+          bookmarkY + bookmarkHeight,               // bottom-right
+          bookmarkY + bookmarkHeight - notchDepth,  // center notch point
+          bookmarkY + bookmarkHeight                // bottom-left
         };
 
         // Draw bookmark ribbon (inverted if selected)
@@ -499,7 +502,7 @@ void HomeActivity::render() {
 
   // --- Bottom menu tiles ---
   // Build menu items dynamically
-  std::vector<const char*> menuItems = {"Browse Files", "File Transfer", "InfoBoard", "Settings"};
+  std::vector<const char*> menuItems = {"Browse Files", "File Transfer", "InfoBoard", "Pomodoro", "Settings"};
   if (hasOpdsUrl) {
     // Insert Calibre Library after Browse Files
     menuItems.insert(menuItems.begin() + 1, "Calibre Library");

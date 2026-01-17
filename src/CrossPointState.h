@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>
 #include <iosfwd>
 #include <string>
 
@@ -9,6 +10,7 @@ class CrossPointState {
  public:
   std::string openEpubPath;
   uint8_t lastSleepImage;
+  uint8_t pomodoroMinutes = 25;
   ~CrossPointState() = default;
 
   // Get singleton instance

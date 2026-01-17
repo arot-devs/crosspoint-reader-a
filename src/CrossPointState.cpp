@@ -5,8 +5,11 @@
 #include <Serialization.h>
 
 namespace {
-constexpr uint8_t STATE_FILE_VERSION = 2;
+constexpr uint8_t STATE_FILE_VERSION = 3;
 constexpr char STATE_FILE[] = "/.crosspoint/state.bin";
+constexpr uint8_t POMODORO_DEFAULT_MINUTES = 25;
+constexpr uint8_t POMODORO_MIN_MINUTES = 5;
+constexpr uint8_t POMODORO_MAX_MINUTES = 60;
 }  // namespace
 
 CrossPointState CrossPointState::instance;
@@ -20,6 +23,7 @@ bool CrossPointState::saveToFile() const {
   serialization::writePod(outputFile, STATE_FILE_VERSION);
   serialization::writeString(outputFile, openEpubPath);
   serialization::writePod(outputFile, lastSleepImage);
+  serialization::writePod(outputFile, pomodoroMinutes);
   outputFile.close();
   return true;
 }
@@ -43,6 +47,15 @@ bool CrossPointState::loadFromFile() {
     serialization::readPod(inputFile, lastSleepImage);
   } else {
     lastSleepImage = 0;
+  }
+  if (version >= 3) {
+    serialization::readPod(inputFile, pomodoroMinutes);
+  } else {
+    pomodoroMinutes = POMODORO_DEFAULT_MINUTES;
+  }
+
+  if (pomodoroMinutes < POMODORO_MIN_MINUTES || pomodoroMinutes > POMODORO_MAX_MINUTES) {
+    pomodoroMinutes = POMODORO_DEFAULT_MINUTES;
   }
 
   inputFile.close();
