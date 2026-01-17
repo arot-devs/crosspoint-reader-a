@@ -90,6 +90,11 @@ void InfoBoardActivity::handleSerialInput() {
       std::string text = message;
       const bool isJson = tryParseJsonMessage(message, text, mode, append, finalRender, clear);
 
+      if (!isJson && !message.empty() && message.front() == '{') {
+        Serial.printf("[%lu] [INFO] Dropping invalid JSON payload\n", millis());
+        continue;
+      }
+
       if (!isJson && message == lastMessage) {
         continue;
       }

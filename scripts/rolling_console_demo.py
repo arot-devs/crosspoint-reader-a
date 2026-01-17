@@ -77,6 +77,13 @@ def build_payload(text: str) -> str:
     return json.dumps({"mode": "console", "text": text})
 
 
+def build_append_payload(text: str, final: bool) -> str:
+    payload: dict[str, object] = {"mode": "console", "append": True, "text": text}
+    if final:
+        payload["final"] = True
+    return json.dumps(payload)
+
+
 def payload_bytes(text: str) -> bytes:
     return build_payload(text).encode("utf-8")
 
@@ -141,13 +148,13 @@ def main() -> int:
         "--lines",
         type=int,
         default=20,
-        help="Lines to keep in view (match display capacity; default: 20)",
+        help="Lines to keep in view for full-frame mode (default: 20)",
     )
     parser.add_argument(
         "--max-bytes",
         type=int,
         default=MAX_PAYLOAD_BYTES,
-        help=f"Max JSON payload size before trimming (default: {MAX_PAYLOAD_BYTES})",
+        help=f"Max JSON payload size before trimming in full-frame mode (default: {MAX_PAYLOAD_BYTES})",
     )
     parser.add_argument(
         "--chunk-size",
@@ -160,6 +167,16 @@ def main() -> int:
         type=float,
         default=0.01,
         help="Seconds to sleep between chunks (default: 0.01)",
+    )
+    parser.add_argument(
+        "--full-frame",
+        action="store_true",
+        help="Send full-screen payloads each update (legacy mode).",
+    )
+    parser.add_argument(
+        "--clear-first",
+        action="store_true",
+        help="Clear the console buffer before starting (append mode only).",
     )
     parser.add_argument("--list", action="store_true", help="List available serial ports and exit")
     args = parser.parse_args()
@@ -196,9 +213,10 @@ def main() -> int:
                 sys.exit("No serial ports detected. Use --list to view ports.")
             sys.exit("Multiple serial ports detected. Pass one explicitly or use --list.")
 
+    mode_label = "full-frame" if args.full_frame else "append"
     print(
         "Rolling console demo: "
-        f"{args.lines} lines, {args.interval:.2f}s/line for {args.duration:.1f}s."
+        f"{args.lines} lines, {args.interval:.2f}s/line for {args.duration:.1f}s ({mode_label})."
     )
     print("Press Ctrl+C to stop.")
     with serial.Serial(port, args.baud, timeout=1) as ser:
@@ -208,18 +226,25 @@ def main() -> int:
         start_time = time.time()
         line_index = 0
         warned_trim = False
+        if not args.full_frame and args.clear_first:
+            clear_payload = json.dumps({"mode": "console", "clear": True, "final": True})
+            write_payload(ser, clear_payload.encode("utf-8"), args.chunk_size, args.chunk_delay)
         while True:
             next_tick = start_time + (line_index * args.interval)
             if next_tick - start_time >= args.duration:
                 break
             log_line = format_log_line(line_index, start_time)
-            buffer.append(log_line)
-            trimmed = trim_buffer_to_fit(buffer, args.max_bytes)
-            if trimmed and not warned_trim:
-                print("Trimmed payload to fit max bytes; reduce --lines or --max-bytes for full history.")
-                warned_trim = True
-            payload = payload_bytes("\n".join(buffer))
-            write_payload(ser, payload, args.chunk_size, args.chunk_delay)
+            if args.full_frame:
+                buffer.append(log_line)
+                trimmed = trim_buffer_to_fit(buffer, args.max_bytes)
+                if trimmed and not warned_trim:
+                    print("Trimmed payload to fit max bytes; reduce --lines or --max-bytes for full history.")
+                    warned_trim = True
+                payload = payload_bytes("\n".join(buffer))
+                write_payload(ser, payload, args.chunk_size, args.chunk_delay)
+            else:
+                payload = build_append_payload(log_line + "\n", final=True).encode("utf-8")
+                write_payload(ser, payload, args.chunk_size, args.chunk_delay)
             line_index += 1
             sleep_for = max(0.0, next_tick + args.interval - time.time())
             time.sleep(sleep_for)
