@@ -59,7 +59,7 @@ void test_reset_double_press() {
   TEST_ASSERT_FALSE(first);
   TEST_ASSERT_EQUAL(PomodoroState::Running, model.getState());
 
-  const bool second = model.requestReset(2500);
+  const bool second = model.requestReset(1000 + PomodoroModel::kResetConfirmWindowMs - 100);
   TEST_ASSERT_TRUE(second);
   TEST_ASSERT_EQUAL(PomodoroState::Idle, model.getState());
 }
@@ -70,9 +70,9 @@ void test_reset_window_expiry() {
   model.start(0);
 
   model.requestReset(0);
-  TEST_ASSERT_FALSE(model.isResetPromptActive(2501));
+  TEST_ASSERT_FALSE(model.isResetPromptActive(PomodoroModel::kResetConfirmWindowMs + 1));
 
-  const bool reset = model.requestReset(3000);
+  const bool reset = model.requestReset(PomodoroModel::kResetConfirmWindowMs + 2);
   TEST_ASSERT_FALSE(reset);
   TEST_ASSERT_EQUAL(PomodoroState::Running, model.getState());
 }

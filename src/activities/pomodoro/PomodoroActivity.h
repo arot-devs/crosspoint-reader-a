@@ -18,6 +18,14 @@ class PomodoroActivity final : public Activity {
   bool preventAutoSleep() override;
 
  private:
+  struct PomodoroStats {
+    int todayCount = 0;
+    int weekCount = 0;
+    float todayHours = 0.0f;
+    float weekHours = 0.0f;
+    bool timeValid = false;
+  };
+
   PomodoroModel model;
   const std::function<void()> onGoHome;
 
@@ -33,7 +41,8 @@ class PomodoroActivity final : public Activity {
   int flashRemainingToggles = 0;
   unsigned long nextFlashMs = 0;
 
-  bool useGrayscale = false;
+  PomodoroStats stats;
+  uint32_t sessionStartEpoch = 0;
 
   std::string transientStatus;
   unsigned long transientStatusUntilMs = 0;
@@ -42,16 +51,19 @@ class PomodoroActivity final : public Activity {
   void setTransientStatus(const char* message, unsigned long durationMs);
   std::string buildStatusText(unsigned long nowMs);
   void persistDuration();
+  void loadStats();
+  void logPomodoroCompletion(uint32_t endEpochSeconds);
+  static uint32_t getNowEpochSeconds();
+  static bool isEpochValid(uint32_t epochSeconds);
+  static std::string formatHours(float hours);
 
   void render(EInkDisplay::RefreshMode mode);
-  void renderDial(int centerX, int centerY, int outerRadius, int innerRadius, float sweepAngle, bool dither);
+  void renderDial(int centerX, int centerY, int outerRadius, int innerRadius, float sweepAngle);
   void renderDialTicks(int centerX, int centerY, int outerRadius, bool state);
   void renderDialNumerals(int centerX, int centerY, int numberRadius, bool state);
   void renderPointer(int centerX, int centerY, int outerRadius, float angle, bool state);
   void renderCenterHub(int centerX, int centerY, bool state);
   void renderCenterReadout(int centerX, int centerY, bool showSeconds, int displayValue);
-  void applyGrayscaleWedgeMask(int centerX, int centerY, int outerRadius, int innerRadius, float sweepAngle);
-
   void drawRadialLine(int centerX, int centerY, float cosA, float sinA, int innerRadius, int outerRadius, bool state);
   void drawDitheredRadialLine(int centerX, int centerY, float cosA, float sinA, int innerRadius, int outerRadius,
                               int phase);

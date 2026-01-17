@@ -41,6 +41,10 @@ PlatformIO native tests require a host GCC toolchain; the current environment is
 
 2026-01-17 (User): Add unit tests that can be verified before building the full firmware.
 
+2026-01-17 (User): Only flash the screen at pomodoro start and completion; add persistent daily/weekly completion stats with SD logging, add reset/quit instruction lines, extend the reset double-press window, and hide Up/Down hints while running.
+
+2026-01-17 (Implementation): Switched the pomodoro wedge to a denser BW dither fill to keep shading consistent across fast refreshes, skipping grayscale overlay for the wedge.
+
 
 ## Outcomes & Retrospective
 
@@ -101,7 +105,7 @@ Add unit tests under test/ that validate the Pomodoro state machine transitions,
 
 The Pomodoro tile appears in the home screen menu next to InfoBoard and launches a new activity when selected, using the same action label style as other activities. From IDLE, Up and Down adjust time in 5 minute steps between 5 and 60, Select starts, and the status line reflects Ready with the current duration. While RUNNING, the dial wedge shrinks once per minute, the center readout shows remaining minutes, and when the remaining time is below one minute a small seconds text appears and updates every 10 seconds. Up and Down are ignored while running with a brief status prompt to pause to adjust. Select pauses and resumes, with the wedge and center text frozen while paused.
 
-When remaining time reaches zero, the screen flashes full-screen invert for five cycles, any button press can interrupt the flashing early, and the DONE screen appears with Select starting a new session at the last-used duration. A double press of Back within the reset window returns to IDLE and shows Reset, and a long press of Back quits immediately. The last-used duration persists across app exits and power cycles by storing it in CrossPointState. Auto-sleep is prevented during RUNNING and the completion flash, and on wake from sleep or app relaunch the activity starts in IDLE rather than resuming a prior session.
+When remaining time reaches zero, the screen flashes full-screen invert for five cycles, any button press can interrupt the flashing early, and the DONE screen appears with Select starting a new session at the last-used duration. The start action also triggers the flash, while pause/resume/reset do not. A double press of Back within the reset window returns to IDLE and shows Reset, and a long press of Back quits immediately. The last-used duration persists across app exits and power cycles by storing it in CrossPointState. Daily and weekly completion totals (with hours) appear under the title and are derived from an SD card log of start/end/duration entries. Auto-sleep is prevented during RUNNING and the completion flash, and on wake from sleep or app relaunch the activity starts in IDLE rather than resuming a prior session.
 
 Unit tests pass for the state machine, specifically covering duration clamping, transitions between IDLE, RUNNING, PAUSED, DONE, reset behavior, double-press timing, and that the 10 second tick for the small seconds display advances without per-second updates.
 

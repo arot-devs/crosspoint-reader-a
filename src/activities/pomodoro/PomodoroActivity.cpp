@@ -5,10 +5,12 @@
 
 #include <algorithm>
 #include <cmath>
+#include <ctime>
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
+#include "SDCardManager.h"
 #include "fontIds.h"
 
 namespace {
@@ -27,8 +29,13 @@ constexpr int kOuterPadding = 12;
 constexpr int kNumberInset = 18;
 constexpr int kTickMajorLength = 12;
 constexpr int kTickMinorLength = 6;
-constexpr int kFooterHeight = 80;
 constexpr int kMargin = 20;
+constexpr int kDitherModulo = 4;
+constexpr int kDitherThreshold = 3;
+constexpr uint32_t kMinValidEpoch = 1704067200U;
+constexpr uint32_t kSecondsPerDay = 86400U;
+constexpr uint32_t kSecondsPerWeek = 7U * kSecondsPerDay;
+constexpr char kPomodoroLogPath[] = "/.crosspoint/pomodoro_log.txt";
 }  // namespace
 
 PomodoroActivity::PomodoroActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
@@ -45,12 +52,12 @@ void PomodoroActivity::onEnter() {
     model.setDurationMinutes(25);
   }
 
-  useGrayscale = SETTINGS.textAntiAliasing != 0;
-
   lastDisplayedMinutes = -1;
   lastDisplayedSecondsBucket = -1;
   lastShowSeconds = false;
   lastResetPromptActive = false;
+  sessionStartEpoch = 0;
+  loadStats();
 
   requestRender(EInkDisplay::FULL_REFRESH);
 }
@@ -105,6 +112,176 @@ void PomodoroActivity::persistDuration() {
   APP_STATE.saveToFile();
 }
 
+uint32_t PomodoroActivity::getNowEpochSeconds() {
+  const time_t now = time(nullptr);
+  if (now < 0) {
+    return 0;
+  }
+  return static_cast<uint32_t>(now);
+}
+
+bool PomodoroActivity::isEpochValid(const uint32_t epochSeconds) { return epochSeconds >= kMinValidEpoch; }
+
+std::string PomodoroActivity::formatHours(const float hours) {
+  char buffer[16];
+  snprintf(buffer, sizeof(buffer), "%.1f", hours);
+  return std::string(buffer);
+}
+
+void PomodoroActivity::loadStats() {
+  stats = {};
+  const uint32_t nowEpoch = getNowEpochSeconds();
+  stats.timeValid = isEpochValid(nowEpoch);
+
+  FsFile file = SdMan.open(kPomodoroLogPath, O_RDONLY);
+  if (!file) {
+    return;
+  }
+
+  uint32_t dayStart = 0;
+  uint32_t weekStart = 0;
+  if (stats.timeValid) {
+    const time_t nowTime = static_cast<time_t>(nowEpoch);
+    tm localTime = {};
+    if (localtime_r(&nowTime, &localTime) != nullptr) {
+      tm dayStartTm = localTime;
+      dayStartTm.tm_hour = 0;
+      dayStartTm.tm_min = 0;
+      dayStartTm.tm_sec = 0;
+      const time_t dayStartTime = mktime(&dayStartTm);
+      if (dayStartTime >= 0) {
+        dayStart = static_cast<uint32_t>(dayStartTime);
+      }
+
+      tm weekStartTm = dayStartTm;
+      const int daysSinceSunday = weekStartTm.tm_wday;
+      weekStartTm.tm_mday -= daysSinceSunday;
+      const time_t weekStartTime = mktime(&weekStartTm);
+      if (weekStartTime >= 0) {
+        weekStart = static_cast<uint32_t>(weekStartTime);
+      }
+    }
+  }
+
+  if (stats.timeValid) {
+    if (dayStart == 0) {
+      dayStart = nowEpoch - kSecondsPerDay;
+    }
+    if (weekStart == 0) {
+      weekStart = nowEpoch - kSecondsPerWeek;
+    }
+  }
+  char line[64];
+  size_t idx = 0;
+
+  while (true) {
+    const int value = file.read();
+    if (value < 0) {
+      break;
+    }
+    if (value == '\n' || idx + 1 >= sizeof(line)) {
+      line[idx] = '\0';
+      idx = 0;
+      if (line[0] == '\0') {
+        continue;
+      }
+
+      char* end = nullptr;
+      (void)strtoul(line, &end, 10);
+      if (!end || *end != ',') {
+        continue;
+      }
+      const uint32_t endEpoch = static_cast<uint32_t>(strtoul(end + 1, &end, 10));
+      if (!end || *end != ',') {
+        continue;
+      }
+      const uint32_t durationSeconds = static_cast<uint32_t>(strtoul(end + 1, &end, 10));
+      if (durationSeconds == 0) {
+        continue;
+      }
+
+      const float hours = static_cast<float>(durationSeconds) / 3600.0f;
+      if (!stats.timeValid) {
+        stats.todayCount += 1;
+        stats.weekCount += 1;
+        stats.todayHours += hours;
+        stats.weekHours += hours;
+        continue;
+      }
+
+      if (!isEpochValid(endEpoch)) {
+        continue;
+      }
+
+      if (endEpoch >= dayStart) {
+        stats.todayCount += 1;
+        stats.todayHours += hours;
+      }
+      if (endEpoch >= weekStart) {
+        stats.weekCount += 1;
+        stats.weekHours += hours;
+      }
+    } else {
+      line[idx++] = static_cast<char>(value);
+    }
+  }
+
+  if (idx > 0) {
+    line[idx] = '\0';
+    char* end = nullptr;
+    (void)strtoul(line, &end, 10);
+    if (end && *end == ',') {
+      const uint32_t endEpoch = static_cast<uint32_t>(strtoul(end + 1, &end, 10));
+      if (end && *end == ',') {
+        const uint32_t durationSeconds = static_cast<uint32_t>(strtoul(end + 1, &end, 10));
+        if (durationSeconds > 0) {
+          const float hours = static_cast<float>(durationSeconds) / 3600.0f;
+          if (!stats.timeValid) {
+            stats.todayCount += 1;
+            stats.weekCount += 1;
+            stats.todayHours += hours;
+            stats.weekHours += hours;
+          } else if (isEpochValid(endEpoch)) {
+            if (endEpoch >= dayStart) {
+              stats.todayCount += 1;
+              stats.todayHours += hours;
+            }
+            if (endEpoch >= weekStart) {
+              stats.weekCount += 1;
+              stats.weekHours += hours;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  file.close();
+}
+
+void PomodoroActivity::logPomodoroCompletion(const uint32_t endEpochSeconds) {
+  uint32_t durationSeconds = static_cast<uint32_t>(model.getDurationMinutes() * 60);
+  if (!SdMan.ensureDirectoryExists("/.crosspoint")) {
+    return;
+  }
+
+  FsFile file = SdMan.open(kPomodoroLogPath, O_WRONLY | O_CREAT | O_APPEND);
+  if (!file) {
+    return;
+  }
+
+  uint32_t startEpoch = sessionStartEpoch;
+  if (isEpochValid(startEpoch) && isEpochValid(endEpochSeconds) && endEpochSeconds >= startEpoch) {
+    durationSeconds = endEpochSeconds - startEpoch;
+  } else if (isEpochValid(endEpochSeconds) && endEpochSeconds >= durationSeconds) {
+    startEpoch = endEpochSeconds - durationSeconds;
+  }
+  file.printf("%lu,%lu,%lu\n", static_cast<unsigned long>(startEpoch), static_cast<unsigned long>(endEpochSeconds),
+              static_cast<unsigned long>(durationSeconds));
+  file.close();
+  loadStats();
+}
+
 void PomodoroActivity::loop() {
   const unsigned long nowMs = millis();
 
@@ -133,8 +310,6 @@ void PomodoroActivity::loop() {
     return;
   }
 
-  const PomodoroState prevState = model.getState();
-
   const bool confirmReleased = mappedInput.wasReleased(MappedInputManager::Button::Confirm);
   const bool backReleased = mappedInput.wasReleased(MappedInputManager::Button::Back);
   const bool upReleased = mappedInput.wasReleased(MappedInputManager::Button::Up);
@@ -143,13 +318,17 @@ void PomodoroActivity::loop() {
   if (confirmReleased) {
     if (model.getState() == PomodoroState::Running) {
       model.pause();
-      requestRender(EInkDisplay::FULL_REFRESH);
+      requestRender(EInkDisplay::FAST_REFRESH);
     } else if (model.getState() == PomodoroState::Paused) {
       model.resume(nowMs);
-      requestRender(EInkDisplay::FULL_REFRESH);
+      requestRender(EInkDisplay::FAST_REFRESH);
     } else {
+      sessionStartEpoch = getNowEpochSeconds();
       model.start(nowMs);
-      requestRender(EInkDisplay::FULL_REFRESH);
+      flashActive = true;
+      flashRemainingToggles = kFlashCycles * 2;
+      nextFlashMs = nowMs;
+      return;
     }
   }
 
@@ -178,14 +357,17 @@ void PomodoroActivity::loop() {
 
   if (backReleased) {
     if (model.requestReset(nowMs)) {
+      sessionStartEpoch = 0;
       setTransientStatus("Reset", kStatusMessageMs);
-      requestRender(EInkDisplay::FULL_REFRESH);
+      requestRender(EInkDisplay::FAST_REFRESH);
     } else if (model.getState() == PomodoroState::Running || model.getState() == PomodoroState::Paused) {
       requestRender(EInkDisplay::FAST_REFRESH);
     }
   }
 
   if (model.tick(nowMs)) {
+    logPomodoroCompletion(getNowEpochSeconds());
+    sessionStartEpoch = 0;
     flashActive = true;
     flashRemainingToggles = kFlashCycles * 2;
     nextFlashMs = nowMs;
@@ -216,10 +398,6 @@ void PomodoroActivity::loop() {
     }
   }
 
-  if (model.getState() != prevState) {
-    requestRender(EInkDisplay::FULL_REFRESH);
-  }
-
   if (renderRequired) {
     render(pendingRefresh);
     pendingRefresh = EInkDisplay::FAST_REFRESH;
@@ -233,10 +411,25 @@ void PomodoroActivity::render(const EInkDisplay::RefreshMode mode) {
   const int pageWidth = renderer.getScreenWidth();
   const int pageHeight = renderer.getScreenHeight();
 
-  const int headerHeight = renderer.getLineHeight(UI_12_FONT_ID) + 12;
-  renderer.drawCenteredText(UI_12_FONT_ID, 10, "POMODORO", true, EpdFontFamily::BOLD);
+  const int statsFont = SMALL_FONT_ID;
+  const int statsLineHeight = renderer.getLineHeight(statsFont);
+  const int titleHeight = renderer.getLineHeight(UI_12_FONT_ID);
+  const int titleY = 8;
+  renderer.drawCenteredText(UI_12_FONT_ID, titleY, "POMODORO", true, EpdFontFamily::BOLD);
 
-  const int availableHeight = pageHeight - headerHeight - kFooterHeight;
+  const int statsStartY = titleY + titleHeight + 6;
+  const int statsBlockHeight = (2 * statsLineHeight) + 2;
+  const int headerHeight = statsStartY + statsBlockHeight + 8;
+  const std::string todayText = "You have completed " + std::to_string(stats.todayCount) + " pomodoros (" +
+                                formatHours(stats.todayHours) + " hours) today";
+  const std::string weekText = "You have completed " + std::to_string(stats.weekCount) + " pomodoros (" +
+                               formatHours(stats.weekHours) + " hours) this week";
+  renderer.drawCenteredText(statsFont, statsStartY, todayText.c_str());
+  renderer.drawCenteredText(statsFont, statsStartY + statsLineHeight + 2, weekText.c_str());
+
+  const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
+  const int footerHeight = (3 * lineHeight) + 48;
+  const int availableHeight = pageHeight - headerHeight - footerHeight;
   const int dialSize = std::min(pageWidth - 2 * kMargin, availableHeight);
   const int dialX = (pageWidth - dialSize) / 2;
   const int dialY = headerHeight + (availableHeight - dialSize) / 2;
@@ -256,7 +449,7 @@ void PomodoroActivity::render(const EInkDisplay::RefreshMode mode) {
   const float sweepAngle = -remainingFraction * kTwoPi;
   const float pointerAngle = kStartAngle + sweepAngle;
 
-  renderDial(centerX, centerY, outerRadius, innerRadius, sweepAngle, !useGrayscale);
+  renderDial(centerX, centerY, outerRadius, innerRadius, sweepAngle);
   renderDialTicks(centerX, centerY, outerRadius - 2, true);
   renderDialNumerals(centerX, centerY, numberRadius, true);
   if (remainingFraction > 0.0f) {
@@ -278,8 +471,13 @@ void PomodoroActivity::render(const EInkDisplay::RefreshMode mode) {
   }
 
   const std::string statusText = buildStatusText(millis());
-  const int statusY = pageHeight - kFooterHeight + 10;
+  const int hintTopY = pageHeight - 40;
+  const int instructionsY2 = hintTopY - lineHeight - 4;
+  const int instructionsY1 = instructionsY2 - lineHeight;
+  const int statusY = instructionsY1 - lineHeight - 4;
   renderer.drawCenteredText(UI_10_FONT_ID, statusY, statusText.c_str());
+  renderer.drawCenteredText(UI_10_FONT_ID, instructionsY1, "Press EXIT twice to reset");
+  renderer.drawCenteredText(UI_10_FONT_ID, instructionsY2, "Long press EXIT to quit");
 
   const char* backLabel = "Exit";
   const char* confirmLabel = "";
@@ -295,8 +493,8 @@ void PomodoroActivity::render(const EInkDisplay::RefreshMode mode) {
       break;
     case PomodoroState::Running:
       confirmLabel = "Pause";
-      prevLabel = "--";
-      nextLabel = "--";
+      prevLabel = "";
+      nextLabel = "";
       break;
     case PomodoroState::Paused:
       confirmLabel = "Resume";
@@ -310,25 +508,17 @@ void PomodoroActivity::render(const EInkDisplay::RefreshMode mode) {
 
   renderer.displayBuffer(mode);
 
-  if (useGrayscale && remainingFraction > 0.0f) {
-    applyGrayscaleWedgeMask(centerX, centerY, outerRadius, innerRadius, sweepAngle);
-  }
-
   lastShowSeconds = showSeconds;
   lastDisplayedMinutes = model.getDisplayMinutes();
   lastDisplayedSecondsBucket = model.getDisplaySecondsBucket();
 }
 
 void PomodoroActivity::renderDial(const int centerX, const int centerY, const int outerRadius, const int innerRadius,
-                                  const float sweepAngle, const bool dither) {
+                                  const float sweepAngle) {
   if (sweepAngle == 0.0f) {
     return;
   }
-  if (dither) {
-    drawWedgeDithered(centerX, centerY, innerRadius, outerRadius, sweepAngle);
-  } else {
-    drawWedgeSolid(centerX, centerY, innerRadius, outerRadius, sweepAngle, true);
-  }
+  drawWedgeDithered(centerX, centerY, innerRadius, outerRadius, sweepAngle);
 }
 
 void PomodoroActivity::renderDialTicks(const int centerX, const int centerY, const int outerRadius, const bool state) {
@@ -414,25 +604,6 @@ void PomodoroActivity::renderCenterReadout(const int centerX, const int centerY,
   }
 }
 
-void PomodoroActivity::applyGrayscaleWedgeMask(const int centerX, const int centerY, const int outerRadius,
-                                               const int innerRadius, const float sweepAngle) {
-  renderer.storeBwBuffer();
-
-  renderer.clearScreen(0x00);
-  renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
-  drawWedgeSolid(centerX, centerY, innerRadius, outerRadius, sweepAngle, false);
-  renderer.copyGrayscaleLsbBuffers();
-
-  renderer.clearScreen(0x00);
-  renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
-  drawWedgeSolid(centerX, centerY, innerRadius, outerRadius, sweepAngle, false);
-  renderer.copyGrayscaleMsbBuffers();
-
-  renderer.displayGrayBuffer();
-  renderer.setRenderMode(GfxRenderer::BW);
-  renderer.restoreBwBuffer();
-}
-
 void PomodoroActivity::drawRadialLine(const int centerX, const int centerY, const float cosA, const float sinA,
                                       const int innerRadius, const int outerRadius, const bool state) {
   for (int r = innerRadius; r <= outerRadius; r++) {
@@ -445,7 +616,7 @@ void PomodoroActivity::drawRadialLine(const int centerX, const int centerY, cons
 void PomodoroActivity::drawDitheredRadialLine(const int centerX, const int centerY, const float cosA, const float sinA,
                                               const int innerRadius, const int outerRadius, const int phase) {
   for (int r = innerRadius; r <= outerRadius; r++) {
-    if (((r + phase) & 1) == 0) {
+    if (((r + phase) % kDitherModulo) < kDitherThreshold) {
       const int x = centerX + static_cast<int>(std::round(cosA * r));
       const int y = centerY + static_cast<int>(std::round(sinA * r));
       renderer.drawPixel(x, y, true);

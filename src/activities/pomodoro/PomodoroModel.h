@@ -9,7 +9,7 @@ class PomodoroModel {
   static constexpr int kMinMinutes = 5;
   static constexpr int kMaxMinutes = 60;
   static constexpr int kStepMinutes = 5;
-  static constexpr uint32_t kResetConfirmWindowMs = 2000;
+  static constexpr uint32_t kResetConfirmWindowMs = 3000;
   static constexpr int kSecondsBucket = 10;
 
   PomodoroModel();
