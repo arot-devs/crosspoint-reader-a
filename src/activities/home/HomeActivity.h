@@ -26,6 +26,7 @@ class HomeActivity final : public Activity {
   const std::function<void()> onSettingsOpen;
   const std::function<void()> onFileTransferOpen;
   const std::function<void()> onInfoBoardOpen;
+  const std::function<void()> onNewsOpen;
   const std::function<void()> onOpdsBrowserOpen;
 
   static void taskTrampoline(void* param);
@@ -40,13 +41,15 @@ class HomeActivity final : public Activity {
   explicit HomeActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                         const std::function<void()>& onContinueReading, const std::function<void()>& onReaderOpen,
                         const std::function<void()>& onSettingsOpen, const std::function<void()>& onFileTransferOpen,
-                        const std::function<void()>& onInfoBoardOpen, const std::function<void()>& onOpdsBrowserOpen)
+                        const std::function<void()>& onInfoBoardOpen, const std::function<void()>& onNewsOpen,
+                        const std::function<void()>& onOpdsBrowserOpen)
       : Activity("Home", renderer, mappedInput),
         onContinueReading(onContinueReading),
         onReaderOpen(onReaderOpen),
         onSettingsOpen(onSettingsOpen),
         onFileTransferOpen(onFileTransferOpen),
         onInfoBoardOpen(onInfoBoardOpen),
+        onNewsOpen(onNewsOpen),
         onOpdsBrowserOpen(onOpdsBrowserOpen) {}
   void onEnter() override;
   void onExit() override;

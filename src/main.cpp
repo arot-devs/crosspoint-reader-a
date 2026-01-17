@@ -18,6 +18,7 @@
 #include "activities/browser/OpdsBookBrowserActivity.h"
 #include "activities/home/HomeActivity.h"
 #include "activities/infoboard/InfoBoardActivity.h"
+#include "activities/news/NewsFeedActivity.h"
 #include "activities/network/CrossPointWebServerActivity.h"
 #include "activities/reader/ReaderActivity.h"
 #include "activities/settings/SettingsActivity.h"
@@ -238,10 +239,15 @@ void onGoToInfoBoard() {
   enterNewActivity(new InfoBoardActivity(renderer, mappedInputManager, onGoHome));
 }
 
+void onGoToNews() {
+  exitActivity();
+  enterNewActivity(new NewsFeedActivity(renderer, mappedInputManager, onGoHome));
+}
+
 void onGoHome() {
   exitActivity();
   enterNewActivity(new HomeActivity(renderer, mappedInputManager, onContinueReading, onGoToReaderHome, onGoToSettings,
-                                    onGoToFileTransfer, onGoToInfoBoard, onGoToBrowser));
+                                    onGoToFileTransfer, onGoToInfoBoard, onGoToNews, onGoToBrowser));
 }
 
 void setupDisplayAndFonts() {
