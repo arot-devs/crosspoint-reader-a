@@ -45,11 +45,40 @@ void InfoBoardActivity::onEnter() {
 
 void InfoBoardActivity::loop() {
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    sendButtonEvent("back");
     onGoHome();
     return;
   }
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    sendButtonEvent("confirm");
+  }
+  if (mappedInput.wasReleased(MappedInputManager::Button::Up)) {
+    sendButtonEvent("up");
+  }
+  if (mappedInput.wasReleased(MappedInputManager::Button::Down)) {
+    sendButtonEvent("down");
+  }
+  if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
+    sendButtonEvent("left");
+  }
+  if (mappedInput.wasReleased(MappedInputManager::Button::Right)) {
+    sendButtonEvent("right");
+  }
+  if (mappedInput.wasReleased(MappedInputManager::Button::PageBack)) {
+    sendButtonEvent("page_back");
+  }
+  if (mappedInput.wasReleased(MappedInputManager::Button::PageForward)) {
+    sendButtonEvent("page_forward");
+  }
 
   handleSerialInput();
+}
+
+void InfoBoardActivity::sendButtonEvent(const char* button) {
+  if (!Serial) {
+    return;
+  }
+  Serial.printf("IBEV {\"v\":1,\"event\":\"button\",\"button\":\"%s\",\"action\":\"release\"}\n", button);
 }
 
 void InfoBoardActivity::renderStatus(const char* message) {

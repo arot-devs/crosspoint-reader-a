@@ -19,6 +19,7 @@ class InfoBoardActivity final : public Activity {
   std::string lastMessage;
   std::string consoleBuffer;
 
+  void sendButtonEvent(const char* button);
   bool tryParseJsonMessage(const std::string& message, std::string& outText, RenderMode& outMode, bool& outAppend,
                            bool& outFinal, bool& outClear) const;
   void renderCenteredMessage(const std::string& message, EInkDisplay::RefreshMode refreshMode, bool decodeEscapes);
