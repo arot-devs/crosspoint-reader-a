@@ -9,13 +9,26 @@ BOOKERLY_FONT_SIZES=(12 14 16 18)
 NOTOSANS_FONT_SIZES=(12 14 16 18)
 OPENDYSLEXIC_FONT_SIZES=(8 10 12 14)
 NOTO_MATH_FONT_PATH="../builtinFonts/source/NotoSansMath/NotoSansMath-Regular.ttf"
+MATH_EXTRA_INTERVALS=(
+  "0x0370,0x03FF"  # Greek & Coptic
+  "0x2113,0x2113"  # ℓ
+  "0x211D,0x211D"  # ℝ
+  "0x27E8,0x27E9"  # ⟨⟩
+  "0x1D49C,0x1D4B5"  # Math Script Capitals
+  "0x1D538,0x1D551"  # Double-Struck Capitals
+)
+
+MATH_INTERVAL_ARGS=()
+for interval in "${MATH_EXTRA_INTERVALS[@]}"; do
+  MATH_INTERVAL_ARGS+=(--additional-intervals "$interval")
+done
 
 for size in ${BOOKERLY_FONT_SIZES[@]}; do
   for style in ${READER_FONT_STYLES[@]}; do
     font_name="bookerly_${size}_$(echo $style | tr '[:upper:]' '[:lower:]')"
     font_path="../builtinFonts/source/Bookerly/Bookerly-${style}.ttf"
     output_path="../builtinFonts/${font_name}.h"
-    python fontconvert.py $font_name $size $font_path "$NOTO_MATH_FONT_PATH" --2bit > $output_path
+    python fontconvert.py $font_name $size $font_path "$NOTO_MATH_FONT_PATH" --2bit "${MATH_INTERVAL_ARGS[@]}" > $output_path
     echo "Generated $output_path"
   done
 done
