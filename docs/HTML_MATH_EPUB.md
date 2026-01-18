@@ -24,6 +24,12 @@ PowerShell:
 python scripts/html_to_epub_mathfix.py input.html output.epub --title "Your Title"
 ```
 
+PowerShell wrapper:
+
+```sh
+pwsh -File scripts/html_to_epub_mathfix.ps1 -InputHtml input.html -OutputEpub output.epub -Title "Your Title"
+```
+
 Optional: keep the cleaned HTML for debugging:
 
 ```sh
