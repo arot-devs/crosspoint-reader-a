@@ -12,6 +12,15 @@ Tweaks:
 - Extensive documentation on rendering Markdown with LaTeX into the reader's supported format.
 - FileTransfer auto-connects to the last used WiFi instead of requiring two manual clicks; overall it is ~75% faster to reach "able to transfer file."
 
+## How to use this fork
+
+- **Firmware builds** live under `_custom_firmware/`. Higher-numbered folders are newer (more recent) builds.
+
+## Folder notes
+
+- `docs_for_llm/`: documentation for agentic development work.
+- `skills/`: an agent skill for handling file transfers to the device (pairs nicely with the one-click file server start).
+
 ---
 
 # Original README
