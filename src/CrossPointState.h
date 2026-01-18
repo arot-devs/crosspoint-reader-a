@@ -9,6 +9,7 @@ class CrossPointState {
 
  public:
   std::string openEpubPath;
+  std::string lastWifiSsid;
   uint8_t lastSleepImage;
   uint8_t pomodoroMinutes = 25;
   ~CrossPointState() = default;

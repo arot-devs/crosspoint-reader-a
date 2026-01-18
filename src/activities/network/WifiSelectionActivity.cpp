@@ -5,6 +5,7 @@
 
 #include <map>
 
+#include "CrossPointState.h"
 #include "MappedInputManager.h"
 #include "WifiCredentialStore.h"
 #include "activities/util/KeyboardEntryActivity.h"
@@ -250,6 +251,9 @@ void WifiSelectionActivity::checkConnectionStatus() {
     char ipStr[16];
     snprintf(ipStr, sizeof(ipStr), "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
     connectedIP = ipStr;
+
+    APP_STATE.lastWifiSsid = selectedSSID;
+    APP_STATE.saveToFile();
 
     // If we entered a new password, ask if user wants to save it
     // Otherwise, immediately complete so parent can start web server

@@ -5,7 +5,7 @@
 #include <Serialization.h>
 
 namespace {
-constexpr uint8_t STATE_FILE_VERSION = 3;
+constexpr uint8_t STATE_FILE_VERSION = 4;
 constexpr char STATE_FILE[] = "/.crosspoint/state.bin";
 constexpr uint8_t POMODORO_DEFAULT_MINUTES = 25;
 constexpr uint8_t POMODORO_MIN_MINUTES = 5;
@@ -24,6 +24,7 @@ bool CrossPointState::saveToFile() const {
   serialization::writeString(outputFile, openEpubPath);
   serialization::writePod(outputFile, lastSleepImage);
   serialization::writePod(outputFile, pomodoroMinutes);
+  serialization::writeString(outputFile, lastWifiSsid);
   outputFile.close();
   return true;
 }
@@ -52,6 +53,11 @@ bool CrossPointState::loadFromFile() {
     serialization::readPod(inputFile, pomodoroMinutes);
   } else {
     pomodoroMinutes = POMODORO_DEFAULT_MINUTES;
+  }
+  if (version >= 4) {
+    serialization::readString(inputFile, lastWifiSsid);
+  } else {
+    lastWifiSsid.clear();
   }
 
   if (pomodoroMinutes < POMODORO_MIN_MINUTES || pomodoroMinutes > POMODORO_MAX_MINUTES) {

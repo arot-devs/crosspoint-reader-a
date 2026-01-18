@@ -13,11 +13,13 @@
 
 // Web server activity states
 enum class WebServerActivityState {
-  MODE_SELECTION,  // Choosing between Join Network and Create Hotspot
-  WIFI_SELECTION,  // WiFi selection subactivity is active (for Join Network mode)
-  AP_STARTING,     // Starting Access Point mode
-  SERVER_RUNNING,  // Web server is running and handling requests
-  SHUTTING_DOWN    // Shutting down server and WiFi
+  AUTO_SCANNING,    // Scanning for saved WiFi networks
+  AUTO_CONNECTING,  // Connecting to a saved WiFi network
+  MODE_SELECTION,   // Choosing between Join Network and Create Hotspot
+  WIFI_SELECTION,   // WiFi selection subactivity is active (for Join Network mode)
+  AP_STARTING,      // Starting Access Point mode
+  SERVER_RUNNING,   // Web server is running and handling requests
+  SHUTTING_DOWN     // Shutting down server and WiFi
 };
 
 /**
@@ -47,6 +49,11 @@ class CrossPointWebServerActivity final : public ActivityWithSubactivity {
   // Server status
   std::string connectedIP;
   std::string connectedSSID;  // For STA mode: network name, For AP mode: AP name
+  std::string autoConnectSSID;
+  std::string autoConnectPassword;
+  bool autoConnectRequiresPassword = false;
+  unsigned long autoConnectStartMs = 0;
+  bool confirmHoldHandled = false;
 
   // Performance monitoring
   unsigned long lastHandleClientTime = 0;
@@ -58,6 +65,12 @@ class CrossPointWebServerActivity final : public ActivityWithSubactivity {
 
   void onNetworkModeSelected(NetworkMode mode);
   void onWifiSelectionComplete(bool connected);
+  void startAutoConnect();
+  void processAutoScanResults();
+  void attemptAutoConnect();
+  void checkAutoConnectStatus();
+  void launchNetworkModeSelection();
+  void shutdownNetwork();
   void startAccessPoint();
   void startWebServer();
   void stopWebServer();

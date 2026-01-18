@@ -9,8 +9,10 @@
 
 #include <cstddef>
 
+#include "CrossPointState.h"
 #include "MappedInputManager.h"
 #include "NetworkModeSelectionActivity.h"
+#include "WifiCredentialStore.h"
 #include "WifiSelectionActivity.h"
 #include "fontIds.h"
 
@@ -21,6 +23,8 @@ constexpr const char* AP_PASSWORD = nullptr;  // Open network for ease of use
 constexpr const char* AP_HOSTNAME = "crosspoint";
 constexpr uint8_t AP_CHANNEL = 1;
 constexpr uint8_t AP_MAX_CONNECTIONS = 4;
+constexpr unsigned long kAutoConnectTimeoutMs = 15000;
+constexpr unsigned long kSetupHoldMs = 1200;
 
 // DNS server for captive portal (redirects all DNS queries to our IP)
 DNSServer* dnsServer = nullptr;
@@ -55,12 +59,7 @@ void CrossPointWebServerActivity::onEnter() {
               &displayTaskHandle  // Task handle
   );
 
-  // Launch network mode selection subactivity
-  Serial.printf("[%lu] [WEBACT] Launching NetworkModeSelectionActivity...\n", millis());
-  enterNewActivity(new NetworkModeSelectionActivity(
-      renderer, mappedInput, [this](const NetworkMode mode) { onNetworkModeSelected(mode); },
-      [this]() { onGoBack(); }  // Cancel goes back to home
-      ));
+  startAutoConnect();
 }
 
 void CrossPointWebServerActivity::onExit() {
@@ -70,37 +69,7 @@ void CrossPointWebServerActivity::onExit() {
 
   state = WebServerActivityState::SHUTTING_DOWN;
 
-  // Stop the web server first (before disconnecting WiFi)
-  stopWebServer();
-
-  // Stop mDNS
-  MDNS.end();
-
-  // Stop DNS server if running (AP mode)
-  if (dnsServer) {
-    Serial.printf("[%lu] [WEBACT] Stopping DNS server...\n", millis());
-    dnsServer->stop();
-    delete dnsServer;
-    dnsServer = nullptr;
-  }
-
-  // Brief wait for LWIP stack to flush pending packets
-  delay(50);
-
-  // Disconnect WiFi gracefully
-  if (isApMode) {
-    Serial.printf("[%lu] [WEBACT] Stopping WiFi AP...\n", millis());
-    WiFi.softAPdisconnect(true);
-  } else {
-    Serial.printf("[%lu] [WEBACT] Disconnecting WiFi (graceful)...\n", millis());
-    WiFi.disconnect(false);  // false = don't erase credentials, send disconnect frame
-  }
-  delay(30);  // Allow disconnect frame to be sent
-
-  Serial.printf("[%lu] [WEBACT] Setting WiFi mode OFF...\n", millis());
-  WiFi.mode(WIFI_OFF);
-  delay(30);  // Allow WiFi hardware to power down
-
+  shutdownNetwork();
   Serial.printf("[%lu] [WEBACT] [MEM] Free heap after WiFi disconnect: %d bytes\n", millis(), ESP.getFreeHeap());
 
   // Acquire mutex before deleting task
@@ -159,6 +128,8 @@ void CrossPointWebServerActivity::onWifiSelectionComplete(const bool connected) 
     connectedIP = static_cast<WifiSelectionActivity*>(subActivity.get())->getConnectedIP();
     connectedSSID = WiFi.SSID().c_str();
     isApMode = false;
+    APP_STATE.lastWifiSsid = connectedSSID;
+    APP_STATE.saveToFile();
 
     exitActivity();
 
@@ -173,10 +144,167 @@ void CrossPointWebServerActivity::onWifiSelectionComplete(const bool connected) 
     // User cancelled - go back to mode selection
     exitActivity();
     state = WebServerActivityState::MODE_SELECTION;
-    enterNewActivity(new NetworkModeSelectionActivity(
-        renderer, mappedInput, [this](const NetworkMode mode) { onNetworkModeSelected(mode); },
-        [this]() { onGoBack(); }));
+    launchNetworkModeSelection();
   }
+}
+
+void CrossPointWebServerActivity::startAutoConnect() {
+  Serial.printf("[%lu] [WEBACT] Auto-connecting to saved WiFi...\n", millis());
+  xSemaphoreTake(renderingMutex, portMAX_DELAY);
+  WIFI_STORE.loadFromFile();
+  xSemaphoreGive(renderingMutex);
+
+  if (WIFI_STORE.getCredentials().empty()) {
+    Serial.printf("[%lu] [WEBACT] No saved WiFi credentials found\n", millis());
+    launchNetworkModeSelection();
+    return;
+  }
+
+  state = WebServerActivityState::AUTO_SCANNING;
+  updateRequired = true;
+
+  WiFi.mode(WIFI_STA);
+  WiFi.disconnect();
+  delay(100);
+  WiFi.scanNetworks(true);
+}
+
+void CrossPointWebServerActivity::processAutoScanResults() {
+  const int16_t scanResult = WiFi.scanComplete();
+  if (scanResult == WIFI_SCAN_RUNNING) {
+    return;
+  }
+
+  if (scanResult == WIFI_SCAN_FAILED) {
+    WiFi.scanDelete();
+    launchNetworkModeSelection();
+    return;
+  }
+
+  const std::string preferredSsid = APP_STATE.lastWifiSsid;
+  int bestIndex = -1;
+  int32_t bestRssi = -1000;
+
+  for (int i = 0; i < scanResult; i++) {
+    const std::string ssid = WiFi.SSID(i).c_str();
+    if (ssid.empty()) {
+      continue;
+    }
+    if (!WIFI_STORE.hasSavedCredential(ssid)) {
+      continue;
+    }
+    if (!preferredSsid.empty() && ssid == preferredSsid) {
+      bestIndex = i;
+      break;
+    }
+    const int32_t rssi = WiFi.RSSI(i);
+    if (rssi > bestRssi) {
+      bestRssi = rssi;
+      bestIndex = i;
+    }
+  }
+
+  if (bestIndex < 0) {
+    WiFi.scanDelete();
+    launchNetworkModeSelection();
+    return;
+  }
+
+  autoConnectSSID = WiFi.SSID(bestIndex).c_str();
+  autoConnectRequiresPassword = (WiFi.encryptionType(bestIndex) != WIFI_AUTH_OPEN);
+  const auto* savedCred = WIFI_STORE.findCredential(autoConnectSSID);
+  autoConnectPassword = savedCred ? savedCred->password : "";
+
+  WiFi.scanDelete();
+  attemptAutoConnect();
+}
+
+void CrossPointWebServerActivity::attemptAutoConnect() {
+  Serial.printf("[%lu] [WEBACT] Auto-connecting to %s\n", millis(), autoConnectSSID.c_str());
+  state = WebServerActivityState::AUTO_CONNECTING;
+  autoConnectStartMs = millis();
+  updateRequired = true;
+
+  WiFi.mode(WIFI_STA);
+  if (autoConnectRequiresPassword && !autoConnectPassword.empty()) {
+    WiFi.begin(autoConnectSSID.c_str(), autoConnectPassword.c_str());
+  } else {
+    WiFi.begin(autoConnectSSID.c_str());
+  }
+}
+
+void CrossPointWebServerActivity::checkAutoConnectStatus() {
+  const wl_status_t status = WiFi.status();
+
+  if (status == WL_CONNECTED) {
+    IPAddress ip = WiFi.localIP();
+    char ipStr[16];
+    snprintf(ipStr, sizeof(ipStr), "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
+    connectedIP = ipStr;
+    connectedSSID = WiFi.SSID().c_str();
+    isApMode = false;
+    APP_STATE.lastWifiSsid = connectedSSID;
+    APP_STATE.saveToFile();
+
+    exitActivity();
+
+    if (MDNS.begin(AP_HOSTNAME)) {
+      Serial.printf("[%lu] [WEBACT] mDNS started: http://%s.local/\n", millis(), AP_HOSTNAME);
+    }
+    startWebServer();
+    return;
+  }
+
+  if (status == WL_CONNECT_FAILED || status == WL_NO_SSID_AVAIL) {
+    launchNetworkModeSelection();
+    return;
+  }
+
+  if (millis() - autoConnectStartMs > kAutoConnectTimeoutMs) {
+    WiFi.disconnect();
+    launchNetworkModeSelection();
+  }
+}
+
+void CrossPointWebServerActivity::launchNetworkModeSelection() {
+  state = WebServerActivityState::MODE_SELECTION;
+  updateRequired = false;
+  enterNewActivity(new NetworkModeSelectionActivity(
+      renderer, mappedInput, [this](const NetworkMode mode) { onNetworkModeSelected(mode); },
+      [this]() { onGoBack(); }));
+}
+
+void CrossPointWebServerActivity::shutdownNetwork() {
+  // Stop the web server first (before disconnecting WiFi)
+  stopWebServer();
+
+  // Stop mDNS
+  MDNS.end();
+
+  // Stop DNS server if running (AP mode)
+  if (dnsServer) {
+    Serial.printf("[%lu] [WEBACT] Stopping DNS server...\n", millis());
+    dnsServer->stop();
+    delete dnsServer;
+    dnsServer = nullptr;
+  }
+
+  // Brief wait for LWIP stack to flush pending packets
+  delay(50);
+
+  // Disconnect WiFi gracefully
+  if (isApMode) {
+    Serial.printf("[%lu] [WEBACT] Stopping WiFi AP...\n", millis());
+    WiFi.softAPdisconnect(true);
+  } else {
+    Serial.printf("[%lu] [WEBACT] Disconnecting WiFi (graceful)...\n", millis());
+    WiFi.disconnect(false);  // false = don't erase credentials, send disconnect frame
+  }
+  delay(30);  // Allow disconnect frame to be sent
+
+  Serial.printf("[%lu] [WEBACT] Setting WiFi mode OFF...\n", millis());
+  WiFi.mode(WIFI_OFF);
+  delay(30);  // Allow WiFi hardware to power down
 }
 
 void CrossPointWebServerActivity::startAccessPoint() {
@@ -276,6 +404,24 @@ void CrossPointWebServerActivity::loop() {
     return;
   }
 
+  if (state == WebServerActivityState::AUTO_SCANNING) {
+    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+      onGoBack();
+      return;
+    }
+    processAutoScanResults();
+    return;
+  }
+
+  if (state == WebServerActivityState::AUTO_CONNECTING) {
+    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+      onGoBack();
+      return;
+    }
+    checkAutoConnectStatus();
+    return;
+  }
+
   // Handle different states
   if (state == WebServerActivityState::SERVER_RUNNING) {
     // Handle DNS requests for captive portal (AP mode only)
@@ -302,6 +448,18 @@ void CrossPointWebServerActivity::loop() {
           Serial.printf("[%lu] [WEBACT] Warning: Weak WiFi signal: %d dBm\n", millis(), rssi);
         }
       }
+    }
+
+    // Allow long-press on Confirm to enter WiFi setup
+    if (mappedInput.isPressed(MappedInputManager::Button::Confirm) && mappedInput.getHeldTime() >= kSetupHoldMs) {
+      if (!confirmHoldHandled) {
+        confirmHoldHandled = true;
+        shutdownNetwork();
+        launchNetworkModeSelection();
+        return;
+      }
+    } else if (!mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
+      confirmHoldHandled = false;
     }
 
     // Handle web server requests - maximize throughput with watchdog safety
@@ -365,6 +523,27 @@ void CrossPointWebServerActivity::render() const {
   if (state == WebServerActivityState::SERVER_RUNNING) {
     renderer.clearScreen();
     renderServerRunning();
+    renderer.displayBuffer();
+  } else if (state == WebServerActivityState::AUTO_SCANNING) {
+    renderer.clearScreen();
+    const auto pageHeight = renderer.getScreenHeight();
+    renderer.drawCenteredText(UI_12_FONT_ID, 15, "File Transfer", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 10, "Scanning saved WiFi...");
+    const auto labels = mappedInput.mapLabels("« Exit", "", "", "");
+    renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    renderer.displayBuffer();
+  } else if (state == WebServerActivityState::AUTO_CONNECTING) {
+    renderer.clearScreen();
+    const auto pageHeight = renderer.getScreenHeight();
+    renderer.drawCenteredText(UI_12_FONT_ID, 15, "File Transfer", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_12_FONT_ID, pageHeight / 2 - 40, "Connecting...", true, EpdFontFamily::BOLD);
+    std::string ssidInfo = "to " + autoConnectSSID;
+    if (ssidInfo.length() > 25) {
+      ssidInfo.replace(22, ssidInfo.length() - 22, "...");
+    }
+    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 10, ssidInfo.c_str());
+    const auto labels = mappedInput.mapLabels("« Exit", "", "", "");
+    renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
   } else if (state == WebServerActivityState::AP_STARTING) {
     renderer.clearScreen();
@@ -460,6 +639,8 @@ void CrossPointWebServerActivity::renderServerRunning() const {
     renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 5, "or scan QR code with your phone:");
   }
 
-  const auto labels = mappedInput.mapLabels("« Exit", "", "", "");
+  const int pageHeight = renderer.getScreenHeight();
+  renderer.drawCenteredText(SMALL_FONT_ID, pageHeight - 90, "Hold OK for WiFi setup");
+  const auto labels = mappedInput.mapLabels("« Exit", "Setup", "", "");
   renderer.drawButtonHints(UI_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
