@@ -1,6 +1,18 @@
 #include "GfxRenderer.h"
 
+#include <FontManager.h>
 #include <Utf8.h>
+#include <algorithm>
+
+#include "fontIds.h"
+
+namespace {
+constexpr int kExternalBaselineAdjust = 4;
+
+bool isUiFont(const int fontId) {
+  return fontId == UI_10_FONT_ID || fontId == UI_12_FONT_ID || fontId == SMALL_FONT_ID;
+}
+}  // namespace
 
 void GfxRenderer::insertFont(const int fontId, EpdFontFamily font) { fontMap.insert({fontId, font}); }
 
@@ -72,8 +84,45 @@ int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontF
     return 0;
   }
 
+  const auto& fontFamily = fontMap.at(fontId);
+  FontManager& fm = FontManager::getInstance();
+
+  if (!isUiFont(fontId) && fm.isExternalFontEnabled()) {
+    ExternalFont* extFont = fm.getActiveFont();
+    int width = 0;
+    const char* ptr = text;
+    uint32_t cp;
+    while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&ptr)))) {
+      bool usedExternal = false;
+      if (extFont) {
+        const uint8_t* bitmap = extFont->getGlyph(cp);
+        if (bitmap) {
+          uint8_t minX = 0;
+          uint8_t advanceX = 0;
+          if (extFont->getGlyphMetrics(cp, &minX, &advanceX)) {
+            width += advanceX;
+            usedExternal = true;
+          } else {
+            width += extFont->getCharWidth();
+            usedExternal = true;
+          }
+        }
+      }
+      if (!usedExternal) {
+        const EpdGlyph* glyph = fontFamily.getGlyph(cp, style);
+        if (!glyph) {
+          glyph = fontFamily.getGlyph('?', style);
+        }
+        if (glyph) {
+          width += glyph->advanceX;
+        }
+      }
+    }
+    return width;
+  }
+
   int w = 0, h = 0;
-  fontMap.at(fontId).getTextDimensions(text, &w, &h, style);
+  fontFamily.getTextDimensions(text, &w, &h, style);
   return w;
 }
 
@@ -97,16 +146,17 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
     Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), fontId);
     return;
   }
-  const auto font = fontMap.at(fontId);
+  const auto& font = fontMap.at(fontId);
 
   // no printable characters
-  if (!font.hasPrintableChars(text, style)) {
+  FontManager& fm = FontManager::getInstance();
+  if (!font.hasPrintableChars(text, style) && (isUiFont(fontId) || !fm.isExternalFontEnabled())) {
     return;
   }
 
   uint32_t cp;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
-    renderChar(font, cp, &xpos, &yPos, black, style);
+    renderChar(fontId, font, cp, &xpos, &yPos, black, style);
   }
 }
 
@@ -446,7 +496,24 @@ int GfxRenderer::getSpaceWidth(const int fontId) const {
     return 0;
   }
 
-  return fontMap.at(fontId).getGlyph(' ', EpdFontFamily::REGULAR)->advanceX;
+  FontManager& fm = FontManager::getInstance();
+  if (!isUiFont(fontId) && fm.isExternalFontEnabled()) {
+    ExternalFont* extFont = fm.getActiveFont();
+    if (extFont) {
+      const uint8_t* bitmap = extFont->getGlyph(' ');
+      if (bitmap) {
+        uint8_t minX = 0;
+        uint8_t advanceX = 0;
+        if (extFont->getGlyphMetrics(' ', &minX, &advanceX)) {
+          return advanceX;
+        }
+        return extFont->getCharWidth();
+      }
+    }
+  }
+
+  const EpdGlyph* spaceGlyph = fontMap.at(fontId).getGlyph(' ', EpdFontFamily::REGULAR);
+  return spaceGlyph ? spaceGlyph->advanceX : 0;
 }
 
 int GfxRenderer::getFontAscenderSize(const int fontId) const {
@@ -455,7 +522,16 @@ int GfxRenderer::getFontAscenderSize(const int fontId) const {
     return 0;
   }
 
-  return fontMap.at(fontId).getData(EpdFontFamily::REGULAR)->ascender;
+  int ascender = fontMap.at(fontId).getData(EpdFontFamily::REGULAR)->ascender;
+  FontManager& fm = FontManager::getInstance();
+  if (!isUiFont(fontId) && fm.isExternalFontEnabled()) {
+    ExternalFont* extFont = fm.getActiveFont();
+    if (extFont) {
+      ascender = std::max(ascender, static_cast<int>(extFont->getCharHeight()));
+    }
+  }
+
+  return ascender;
 }
 
 int GfxRenderer::getLineHeight(const int fontId) const {
@@ -464,7 +540,16 @@ int GfxRenderer::getLineHeight(const int fontId) const {
     return 0;
   }
 
-  return fontMap.at(fontId).getData(EpdFontFamily::REGULAR)->advanceY;
+  int lineHeight = fontMap.at(fontId).getData(EpdFontFamily::REGULAR)->advanceY;
+  FontManager& fm = FontManager::getInstance();
+  if (!isUiFont(fontId) && fm.isExternalFontEnabled()) {
+    ExternalFont* extFont = fm.getActiveFont();
+    if (extFont) {
+      lineHeight = std::max(lineHeight, static_cast<int>(extFont->getCharHeight() + kExternalBaselineAdjust));
+    }
+  }
+
+  return lineHeight;
 }
 
 void GfxRenderer::drawButtonHints(const int fontId, const char* btn1, const char* btn2, const char* btn3,
@@ -756,8 +841,21 @@ void GfxRenderer::cleanupGrayscaleWithFrameBuffer() const {
   }
 }
 
-void GfxRenderer::renderChar(const EpdFontFamily& fontFamily, const uint32_t cp, int* x, const int* y,
+void GfxRenderer::renderChar(const int fontId, const EpdFontFamily& fontFamily, const uint32_t cp, int* x,
+                             const int* y,
                              const bool pixelState, const EpdFontFamily::Style style) const {
+  FontManager& fm = FontManager::getInstance();
+  if (!isUiFont(fontId) && fm.isExternalFontEnabled()) {
+    ExternalFont* extFont = fm.getActiveFont();
+    if (extFont) {
+      const uint8_t* bitmap = extFont->getGlyph(cp);
+      if (bitmap) {
+        renderExternalGlyph(bitmap, extFont, cp, x, *y, pixelState);
+        return;
+      }
+    }
+  }
+
   const EpdGlyph* glyph = fontFamily.getGlyph(cp, style);
   if (!glyph) {
     // TODO: Replace with fallback glyph property?
@@ -818,6 +916,42 @@ void GfxRenderer::renderChar(const EpdFontFamily& fontFamily, const uint32_t cp,
   }
 
   *x += glyph->advanceX;
+}
+
+void GfxRenderer::renderExternalGlyph(const uint8_t* bitmap, ExternalFont* font, const uint32_t cp, int* x,
+                                      const int y, const bool pixelState) const {
+  if (!bitmap || !font) {
+    return;
+  }
+
+  const uint8_t width = font->getCharWidth();
+  const uint8_t height = font->getCharHeight();
+  const uint8_t bytesPerRow = font->getBytesPerRow();
+
+  uint8_t minX = 0;
+  uint8_t advanceX = width;
+  if (font->getGlyphMetrics(cp, &minX, &advanceX)) {
+    if (advanceX == 0) {
+      advanceX = width;
+    }
+  }
+
+  const int startX = *x - static_cast<int>(minX);
+  const int startY = y - height + kExternalBaselineAdjust;
+
+  for (int glyphY = 0; glyphY < height; glyphY++) {
+    const int screenY = startY + glyphY;
+    for (int glyphX = 0; glyphX < width; glyphX++) {
+      const int byteIndex = glyphY * bytesPerRow + (glyphX / 8);
+      const int bitIndex = 7 - (glyphX % 8);
+
+      if ((bitmap[byteIndex] >> bitIndex) & 1) {
+        drawPixel(startX + glyphX, screenY, pixelState);
+      }
+    }
+  }
+
+  *x += advanceX;
 }
 
 void GfxRenderer::getOrientedViewableTRBL(int* outTop, int* outRight, int* outBottom, int* outLeft) const {

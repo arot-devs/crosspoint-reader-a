@@ -7,9 +7,10 @@
 #include "parsers/ChapterHtmlSlimParser.h"
 
 namespace {
-constexpr uint8_t SECTION_FILE_VERSION = 9;
-constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(bool) + sizeof(uint8_t) +
-                                 sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint32_t);
+constexpr uint8_t SECTION_FILE_VERSION = 10;
+constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(uint32_t) + sizeof(float) + sizeof(bool) +
+                                 sizeof(uint8_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint16_t) +
+                                 sizeof(uint32_t);
 }  // namespace
 
 uint32_t Section::onPageComplete(std::unique_ptr<Page> page) {
@@ -29,19 +30,22 @@ uint32_t Section::onPageComplete(std::unique_ptr<Page> page) {
   return position;
 }
 
-void Section::writeSectionFileHeader(const int fontId, const float lineCompression, const bool extraParagraphSpacing,
+void Section::writeSectionFileHeader(const int fontId, const uint32_t externalFontSignature,
+                                     const float lineCompression, const bool extraParagraphSpacing,
                                      const uint8_t paragraphAlignment, const uint16_t viewportWidth,
                                      const uint16_t viewportHeight) {
   if (!file) {
     Serial.printf("[%lu] [SCT] File not open for writing header\n", millis());
     return;
   }
-  static_assert(HEADER_SIZE == sizeof(SECTION_FILE_VERSION) + sizeof(fontId) + sizeof(lineCompression) +
-                                   sizeof(extraParagraphSpacing) + sizeof(paragraphAlignment) + sizeof(viewportWidth) +
-                                   sizeof(viewportHeight) + sizeof(pageCount) + sizeof(uint32_t),
+  static_assert(HEADER_SIZE == sizeof(SECTION_FILE_VERSION) + sizeof(fontId) + sizeof(externalFontSignature) +
+                                   sizeof(lineCompression) + sizeof(extraParagraphSpacing) +
+                                   sizeof(paragraphAlignment) + sizeof(viewportWidth) + sizeof(viewportHeight) +
+                                   sizeof(pageCount) + sizeof(uint32_t),
                 "Header size mismatch");
   serialization::writePod(file, SECTION_FILE_VERSION);
   serialization::writePod(file, fontId);
+  serialization::writePod(file, externalFontSignature);
   serialization::writePod(file, lineCompression);
   serialization::writePod(file, extraParagraphSpacing);
   serialization::writePod(file, paragraphAlignment);
@@ -51,8 +55,9 @@ void Section::writeSectionFileHeader(const int fontId, const float lineCompressi
   serialization::writePod(file, static_cast<uint32_t>(0));  // Placeholder for LUT offset
 }
 
-bool Section::loadSectionFile(const int fontId, const float lineCompression, const bool extraParagraphSpacing,
-                              const uint8_t paragraphAlignment, const uint16_t viewportWidth,
+bool Section::loadSectionFile(const int fontId, const uint32_t externalFontSignature, const float lineCompression,
+                              const bool extraParagraphSpacing, const uint8_t paragraphAlignment,
+                              const uint16_t viewportWidth,
                               const uint16_t viewportHeight) {
   if (!SdMan.openFileForRead("SCT", filePath, file)) {
     return false;
@@ -70,18 +75,21 @@ bool Section::loadSectionFile(const int fontId, const float lineCompression, con
     }
 
     int fileFontId;
+    uint32_t fileExternalFontSignature;
     uint16_t fileViewportWidth, fileViewportHeight;
     float fileLineCompression;
     bool fileExtraParagraphSpacing;
     uint8_t fileParagraphAlignment;
     serialization::readPod(file, fileFontId);
+    serialization::readPod(file, fileExternalFontSignature);
     serialization::readPod(file, fileLineCompression);
     serialization::readPod(file, fileExtraParagraphSpacing);
     serialization::readPod(file, fileParagraphAlignment);
     serialization::readPod(file, fileViewportWidth);
     serialization::readPod(file, fileViewportHeight);
 
-    if (fontId != fileFontId || lineCompression != fileLineCompression ||
+    if (fontId != fileFontId || externalFontSignature != fileExternalFontSignature ||
+        lineCompression != fileLineCompression ||
         extraParagraphSpacing != fileExtraParagraphSpacing || paragraphAlignment != fileParagraphAlignment ||
         viewportWidth != fileViewportWidth || viewportHeight != fileViewportHeight) {
       file.close();
@@ -113,10 +121,10 @@ bool Section::clearCache() const {
   return true;
 }
 
-bool Section::createSectionFile(const int fontId, const float lineCompression, const bool extraParagraphSpacing,
-                                const uint8_t paragraphAlignment, const uint16_t viewportWidth,
-                                const uint16_t viewportHeight, const std::function<void()>& progressSetupFn,
-                                const std::function<void(int)>& progressFn) {
+bool Section::createSectionFile(const int fontId, const uint32_t externalFontSignature, const float lineCompression,
+                                const bool extraParagraphSpacing, const uint8_t paragraphAlignment,
+                                const uint16_t viewportWidth, const uint16_t viewportHeight,
+                                const std::function<void()>& progressSetupFn, const std::function<void(int)>& progressFn) {
   constexpr uint32_t MIN_SIZE_FOR_PROGRESS = 50 * 1024;  // 50KB
   const auto localPath = epub->getSpineItem(spineIndex).href;
   const auto tmpHtmlPath = epub->getCachePath() + "/.tmp_" + std::to_string(spineIndex) + ".html";
@@ -171,7 +179,8 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   if (!SdMan.openFileForWrite("SCT", filePath, file)) {
     return false;
   }
-  writeSectionFileHeader(fontId, lineCompression, extraParagraphSpacing, paragraphAlignment, viewportWidth,
+  writeSectionFileHeader(fontId, externalFontSignature, lineCompression, extraParagraphSpacing, paragraphAlignment,
+                         viewportWidth,
                          viewportHeight);
   std::vector<uint32_t> lut = {};
 

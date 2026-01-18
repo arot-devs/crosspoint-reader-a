@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <EInkDisplay.h>
 #include <Epub.h>
+#include <FontManager.h>
 #include <GfxRenderer.h>
 #include <InputManager.h>
 #include <SDCardManager.h>
@@ -238,6 +239,10 @@ void setup() {
   }
 
   SETTINGS.loadFromFile();
+
+  // Initialize external fonts (if present on SD)
+  FontMgr.scanFonts();
+  FontMgr.loadSettings();
 
   // verify power button press duration after we've read settings.
   verifyWakeupLongPress();

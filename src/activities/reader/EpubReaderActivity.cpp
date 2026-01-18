@@ -1,6 +1,7 @@
 #include "EpubReaderActivity.h"
 
 #include <Epub/Page.h>
+#include <FontManager.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <SDCardManager.h>
@@ -265,8 +266,9 @@ void EpubReaderActivity::renderScreen() {
 
     const uint16_t viewportWidth = renderer.getScreenWidth() - orientedMarginLeft - orientedMarginRight;
     const uint16_t viewportHeight = renderer.getScreenHeight() - orientedMarginTop - orientedMarginBottom;
+    const uint32_t externalFontSignature = FontMgr.getSelectedFontSignature();
 
-    if (!section->loadSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
+    if (!section->loadSectionFile(SETTINGS.getReaderFontId(), externalFontSignature, SETTINGS.getReaderLineCompression(),
                                   SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
                                   viewportHeight)) {
       Serial.printf("[%lu] [ERS] Cache not found, building...\n", millis());
@@ -311,7 +313,8 @@ void EpubReaderActivity::renderScreen() {
         renderer.displayBuffer(EInkDisplay::FAST_REFRESH);
       };
 
-      if (!section->createSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
+      if (!section->createSectionFile(SETTINGS.getReaderFontId(), externalFontSignature,
+                                      SETTINGS.getReaderLineCompression(),
                                       SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
                                       viewportHeight, progressSetup, progressCallback)) {
         Serial.printf("[%lu] [ERS] Failed to persist page data to SD\n", millis());
@@ -390,7 +393,8 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 
   // grayscale rendering
   // TODO: Only do this if font supports it
-  if (SETTINGS.textAntiAliasing) {
+  const bool useExternalFont = FontManager::getInstance().isExternalFontEnabled();
+  if (SETTINGS.textAntiAliasing && !useExternalFont) {
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
     page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
