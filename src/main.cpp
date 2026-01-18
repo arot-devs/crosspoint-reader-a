@@ -209,6 +209,7 @@ void setupDisplayAndFonts() {
   renderer.insertFont(UI_10_FONT_ID, ui10FontFamily);
   renderer.insertFont(UI_12_FONT_ID, ui12FontFamily);
   renderer.insertFont(SMALL_FONT_ID, smallFontFamily);
+  renderer.setUiFontIds(UI_10_FONT_ID, UI_12_FONT_ID, SMALL_FONT_ID);
   Serial.printf("[%lu] [   ] Fonts setup\n", millis());
 }
 

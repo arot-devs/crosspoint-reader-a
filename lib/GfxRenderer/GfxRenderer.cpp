@@ -4,17 +4,18 @@
 #include <Utf8.h>
 #include <algorithm>
 
-#include "fontIds.h"
-
 namespace {
 constexpr int kExternalBaselineAdjust = 4;
-
-bool isUiFont(const int fontId) {
-  return fontId == UI_10_FONT_ID || fontId == UI_12_FONT_ID || fontId == SMALL_FONT_ID;
-}
 }  // namespace
 
 void GfxRenderer::insertFont(const int fontId, EpdFontFamily font) { fontMap.insert({fontId, font}); }
+
+bool GfxRenderer::isUiFont(const int fontId) const {
+  if (!uiFontIdsSet) {
+    return false;
+  }
+  return fontId == ui10FontId || fontId == ui12FontId || fontId == smallFontId;
+}
 
 void GfxRenderer::rotateCoordinates(const int x, const int y, int* rotatedX, int* rotatedY) const {
   switch (orientation) {

@@ -32,6 +32,11 @@ class GfxRenderer {
   Orientation orientation;
   uint8_t* bwBufferChunks[BW_BUFFER_NUM_CHUNKS] = {nullptr};
   std::map<int, EpdFontFamily> fontMap;
+  int ui10FontId = 0;
+  int ui12FontId = 0;
+  int smallFontId = 0;
+  bool uiFontIdsSet = false;
+  bool isUiFont(int fontId) const;
   void renderChar(int fontId, const EpdFontFamily& fontFamily, uint32_t cp, int* x, const int* y, bool pixelState,
                   EpdFontFamily::Style style) const;
   void renderExternalGlyph(const uint8_t* bitmap, ExternalFont* font, uint32_t cp, int* x, int y,
@@ -50,6 +55,12 @@ class GfxRenderer {
 
   // Setup
   void insertFont(int fontId, EpdFontFamily font);
+  void setUiFontIds(int ui10, int ui12, int small) {
+    ui10FontId = ui10;
+    ui12FontId = ui12;
+    smallFontId = small;
+    uiFontIdsSet = true;
+  }
 
   // Orientation control (affects logical width/height and coordinate transforms)
   void setOrientation(const Orientation o) { orientation = o; }
