@@ -168,6 +168,7 @@ def main():
     parser.add_argument("--title", default=None)
     parser.add_argument("--split-level", type=int, default=2)
     parser.add_argument("--toc-depth", type=int, default=3)
+    parser.add_argument("--mathml", action="store_true")
     parser.add_argument("--keep-html", action="store_true")
     parser.add_argument("--output-html", default=None)
     parser.add_argument("--pandoc", default="pandoc")
@@ -200,6 +201,8 @@ def main():
             "--epub-title-page=false",
             f"--metadata=title={title}",
         ]
+        if args.mathml:
+            cmd.append("--mathml")
         subprocess.run(cmd, check=True)
         prune_empty_chapters(output_path)
     finally:
