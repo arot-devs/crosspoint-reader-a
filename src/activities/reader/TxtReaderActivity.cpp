@@ -1,5 +1,6 @@
 #include "TxtReaderActivity.h"
 
+#include <FontManager.h>
 #include <GfxRenderer.h>
 #include <SDCardManager.h>
 #include <Serialization.h>
@@ -18,7 +19,7 @@ constexpr size_t CHUNK_SIZE = 8 * 1024;  // 8KB chunk for reading
 
 // Cache file magic and version
 constexpr uint32_t CACHE_MAGIC = 0x54585449;  // "TXTI"
-constexpr uint8_t CACHE_VERSION = 2;          // Increment when cache format changes
+constexpr uint8_t CACHE_VERSION = 3;          // Increment when cache format changes
 }  // namespace
 
 void TxtReaderActivity::taskTrampoline(void* param) {
@@ -146,6 +147,7 @@ void TxtReaderActivity::initializeReader() {
 
   // Store current settings for cache validation
   cachedFontId = SETTINGS.getReaderFontId();
+  cachedExternalFontSignature = FontMgr.getSelectedFontSignature();
   cachedScreenMargin = SETTINGS.screenMargin;
   cachedParagraphAlignment = SETTINGS.paragraphAlignment;
 
@@ -473,7 +475,8 @@ void TxtReaderActivity::renderPage() {
   }
 
   // Grayscale rendering pass (for anti-aliased fonts)
-  if (SETTINGS.textAntiAliasing) {
+  const bool useExternalFont = FontManager::getInstance().isExternalFontEnabled();
+  if (SETTINGS.textAntiAliasing && !useExternalFont) {
     // Save BW buffer for restoration after grayscale pass
     renderer.storeBwBuffer();
 
@@ -575,6 +578,7 @@ bool TxtReaderActivity::loadPageIndexCache() {
   // - int32_t: viewport width
   // - int32_t: lines per page
   // - int32_t: font ID (to invalidate cache on font change)
+  // - uint32_t: external font signature (to invalidate cache on external font change)
   // - int32_t: screen margin (to invalidate cache on margin change)
   // - uint8_t: paragraph alignment (to invalidate cache on alignment change)
   // - uint32_t: total pages count
@@ -636,6 +640,14 @@ bool TxtReaderActivity::loadPageIndexCache() {
     return false;
   }
 
+  uint32_t externalSignature = 0;
+  serialization::readPod(f, externalSignature);
+  if (externalSignature != cachedExternalFontSignature) {
+    Serial.printf("[%lu] [TRS] Cache external font signature mismatch, rebuilding\n", millis());
+    f.close();
+    return false;
+  }
+
   int32_t margin;
   serialization::readPod(f, margin);
   if (margin != cachedScreenMargin) {
@@ -686,6 +698,7 @@ void TxtReaderActivity::savePageIndexCache() const {
   serialization::writePod(f, static_cast<int32_t>(viewportWidth));
   serialization::writePod(f, static_cast<int32_t>(linesPerPage));
   serialization::writePod(f, static_cast<int32_t>(cachedFontId));
+  serialization::writePod(f, cachedExternalFontSignature);
   serialization::writePod(f, static_cast<int32_t>(cachedScreenMargin));
   serialization::writePod(f, cachedParagraphAlignment);
   serialization::writePod(f, static_cast<uint32_t>(pageOffsets.size()));

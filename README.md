@@ -16,6 +16,30 @@ Tweaks:
 
 - **Firmware builds** live under `_custom_firmware/`. Higher-numbered folders are newer (more recent) builds.
 
+## External fonts (SD card)
+
+This fork supports **external reader fonts** loaded from the SD card (useful for large fonts like CJK or custom book fonts).
+UI fonts remain built-in.
+
+**Setup**
+- Copy `.bin` font files to `/fonts` on the SD card.
+- Filename format: `FontName_size_WxH.bin` (example: `Bookerly_20_20x24.bin`).
+- Select it in **Settings → External Reader Font**.
+
+**Notes**
+- External fonts are 1-bit; text anti-aliasing is **disabled automatically** when an external font is active.
+- Built‑in fonts remain as fallback for missing glyphs (including math via Noto Sans Math).
+- Switching external fonts invalidates reader caches (EPUB/TXT re‑indexing happens automatically).
+
+**Generate a .bin from TTF/OTF**
+```
+python3 scripts/generate_external_font.py \
+  --font lib/EpdFont/builtinFonts/source/Bookerly/Bookerly-Regular.ttf \
+  --name Bookerly --size 20 --width 20 --height 24 \
+  --output fonts/Bookerly_20_20x24.bin
+```
+Requires `freetype-py` (same dependency as the existing font converter script).
+
 ## Folder notes
 
 - `docs_for_llm/`: documentation for agentic development work.
