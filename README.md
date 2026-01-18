@@ -1,4 +1,20 @@
-# CrossPoint Reader
+# CrossPoint Reader - a
+
+## What's new in this fork
+
+New:
+- **InfoBoard**: Receives and displays information via USB serial; use it as a display board for real-time message updates.
+- **InfoBoard (console)**: Mimics console output; combine "enqueue text" and "clear screen" to build simple CLI-style programs from the PC side. See `scripts/` for terminal emulation and a working resource monitor.
+- **Pomodoro**: 60-minute pomodoro mode for focused sessions.
+
+Tweaks:
+- Better LaTeX rendering support using SourceSansMath (removes two other fonts for now).
+- Extensive documentation on rendering Markdown with LaTeX into the reader's supported format.
+- FileTransfer auto-connects to the last used WiFi instead of requiring two manual clicks; overall it is ~75% faster to reach "able to transfer file."
+
+---
+
+# Original README
 
 Firmware for the **Xteink X4** e-paper display reader (unaffiliated with Xteink).
 Built using **PlatformIO** and targeting the **ESP32-C3** microcontroller.
