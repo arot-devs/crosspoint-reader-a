@@ -1,4 +1,53 @@
-# CrossPoint Reader
+# CrossPoint Reader - a
+
+## What's new in this fork
+
+New:
+- **InfoBoard**: Receives and displays information via USB serial; use it as a display board for real-time message updates.
+- **InfoBoard (console)**: Mimics console output; combine "enqueue text" and "clear screen" to build simple CLI-style programs from the PC side. See `scripts/` for terminal emulation and a working resource monitor.
+- **Pomodoro**: 60-minute pomodoro mode for focused sessions.
+
+Tweaks:
+- Better LaTeX rendering support using SourceSansMath (removes two other fonts for now).
+- Extensive documentation on rendering Markdown with LaTeX into the reader's supported format.
+- FileTransfer auto-connects to the last used WiFi instead of requiring two manual clicks; overall it is ~75% faster to reach "able to transfer file."
+
+## How to use this fork
+
+- **Firmware builds** live under `_custom_firmware/`. Higher-numbered folders are newer (more recent) builds.
+
+## External fonts (SD card)
+
+This fork supports **external reader fonts** loaded from the SD card (useful for large fonts like CJK or custom book fonts).
+UI fonts remain built-in.
+
+**Setup**
+- Copy `.bin` font files to `/fonts` on the SD card.
+- Filename format: `FontName_size_WxH.bin` (example: `Bookerly_20_20x24.bin`).
+- Select it in **Settings → External Reader Font**.
+
+**Notes**
+- External fonts are 1-bit; text anti-aliasing is **disabled automatically** when an external font is active.
+- Built‑in fonts remain as fallback for missing glyphs (including math via Noto Sans Math).
+- Switching external fonts invalidates reader caches (EPUB/TXT re‑indexing happens automatically).
+
+**Generate a .bin from TTF/OTF**
+```
+python3 scripts/generate_external_font.py \
+  --font lib/EpdFont/builtinFonts/source/Bookerly/Bookerly-Regular.ttf \
+  --name Bookerly --size 20 --width 20 --height 24 \
+  --output fonts/Bookerly_20_20x24.bin
+```
+Requires `freetype-py` (same dependency as the existing font converter script).
+
+## Folder notes
+
+- `docs_for_llm/`: documentation for agentic development work.
+- `skills/`: an agent skill for handling file transfers to the device (pairs nicely with the one-click file server start).
+
+---
+
+# Original README
 
 Firmware for the **Xteink X4** e-paper display reader (unaffiliated with Xteink).
 Built using **PlatformIO** and targeting the **ESP32-C3** microcontroller.
@@ -41,17 +90,13 @@ This project is **not affiliated with Xteink**; it's built as a community projec
   - [ ] Full UTF support
 - [x] Screen rotation
 
-Multi-language support: Read EPUBs in various languages, including English, Spanish, French, German, Italian, Portuguese, Russian, Ukrainian, Polish, Swedish, Norwegian, [and more](./USER_GUIDE.md#supported-languages).
-
-See [the user guide](./USER_GUIDE.md) for instructions on operating CrossPoint. 
-
-For more details about the scope of the project, see the [SCOPE.md](SCOPE.md) document.
+See [the user guide](./USER_GUIDE.md) for instructions on operating CrossPoint.
 
 ## Installing
 
 ### Web (latest firmware)
 
-1. Connect your Xteink X4 to your computer via USB-C and wake/unlock the device
+1. Connect your Xteink X4 to your computer via USB-C
 2. Go to https://xteink.dve.al/ and click "Flash CrossPoint firmware"
 
 To revert back to the official firmware, you can flash the latest official firmware from https://xteink.dve.al/, or swap
@@ -60,7 +105,7 @@ back to the other partition using the "Swap boot partition" button here https://
 ### Web (specific firmware version)
 
 1. Connect your Xteink X4 to your computer via USB-C
-2. Download the `firmware.bin` file from the release of your choice via the [releases page](https://github.com/crosspoint-reader/crosspoint-reader/releases)
+2. Download the `firmware.bin` file from the release of your choice via the [releases page](https://github.com/daveallie/crosspoint-reader/releases)
 3. Go to https://xteink.dve.al/ and flash the firmware file using the "OTA fast flash controls" section
 
 To revert back to the official firmware, you can flash the latest official firmware from https://xteink.dve.al/, or swap
@@ -84,7 +129,7 @@ See [Development](#development) below.
 CrossPoint uses PlatformIO for building and flashing the firmware. To get started, clone the repository:
 
 ```
-git clone --recursive https://github.com/crosspoint-reader/crosspoint-reader
+git clone --recursive https://github.com/daveallie/crosspoint-reader
 
 # Or, if you've already cloned without --recursive:
 git submodule update --init --recursive
@@ -97,25 +142,6 @@ Connect your Xteink X4 to your computer via USB-C and run the following command.
 ```sh
 pio run --target upload
 ```
-### Debugging
-
-After flashing the new features, it’s recommended to capture detailed logs from the serial port.
-
-First, make sure all required Python packages are installed:
-
-```python
-python3 -m pip install pyserial colorama matplotlib
-```
-after that run the script:
-```sh
-# For Linux
-# This was tested on Debian and should work on most Linux systems.
-python3 scripts/debugging_monitor.py
-
-# For macOS
-python3 scripts/debugging_monitor.py /dev/cu.usbmodem2101
-```
-Minor adjustments may be required for Windows.
 
 ## Internals
 
@@ -154,11 +180,8 @@ For more details on the internal file structures, see the [file formats document
 
 Contributions are very welcome!
 
-If you're looking for a way to help out, take a look at the [ideas discussion board](https://github.com/crosspoint-reader/crosspoint-reader/discussions/categories/ideas).
+If you're looking for a way to help out, take a look at the [ideas discussion board](https://github.com/daveallie/crosspoint-reader/discussions/categories/ideas).
 If there's something there you'd like to work on, leave a comment so that we can avoid duplicated effort.
-
-Everyone here is a volunteer, so please be respectful and patient. For more details on our goverance and community 
-principles, please see [GOVERNANCE.md](GOVERNANCE.md).
 
 ### To submit a contribution:
 

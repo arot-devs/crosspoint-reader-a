@@ -1,0 +1,6 @@
+ul, ol { margin: 0 0 0 1.2em; padding: 0; }
+li { margin: 0.2em 0; }
+li > p { margin: 0; display: inline; }
+li > p + ul, li > p + ol { margin-top: 0.2em; }
+ul ul { list-style-type: circle; }
+ul ul ul { list-style-type: square; }
