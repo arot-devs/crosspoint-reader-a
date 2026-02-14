@@ -1,0 +1,45 @@
+commit,date,subject,feature_id
+4dd4aac,2026-01-16,"docs: add AGENTS guide epub",docs_and_repo_meta
+3f7080f,2026-01-16,"docs: add upload and pdf-to-epub guide",docs_and_repo_meta
+c754a59,2026-01-17,"wip: adding infoboard build",infoboard_text_board
+6ebd344,2026-01-17,"Merge branch 'master' of https://github.com/arot-devs/crosspoint-reader-a",history_merge_commits
+9c388a3,2026-01-17,"feat: Enhance serial port handling in send_infoboard.py",infoboard_text_board
+4c7a1e6,2026-01-17,"wip: adding inforbaord test",infoboard_text_board
+2982f5d,2026-01-17,"update firmware",binary_or_scratch_artifacts
+e6bbac4,2026-01-16,"adding new console-like demo",infoboard_text_board
+9dd81ea,2026-01-16,"wip: adding testing scripts",infoboard_text_board
+807c89c,2026-01-17,"update console to support better printing stats",infoboard_text_board
+9b39ea2,2026-01-16,"update addendum on console scrolling",infoboard_text_board
+446a1fb,2026-01-17,"fix: firmware flashing issues",binary_or_scratch_artifacts
+5d62d07,2026-01-17,"refactor: Update rolling console demo for improved JSON handling and incremental updates",infoboard_text_board
+1742709,2026-01-17,"adding btop demo",infoboard_text_board
+045e600,2026-01-16,"update",infoboard_text_board
+9930af6,2026-01-17,"fix: send batched append frames instead of a single big JSON",infoboard_text_board
+6078657,2026-01-17,"rebuilt for bidirectional infoboard comm",infoboard_text_board
+d3735ce,2026-01-17,"wip: adding new firmware",binary_or_scratch_artifacts
+3cf4dc8,2026-01-17,"Revert \"wip: adding new firmware\"",binary_or_scratch_artifacts
+8beec79,2026-01-17,"update epub conversion",math_latex_cjk_pipeline
+d1b7131,2026-01-17,"Merge branch 'master' of https://github.com/arot-devs/crosspoint-reader-a",history_merge_commits
+05a8fc2,2026-01-17,"feat: adding math text fallback support",math_latex_cjk_pipeline
+91cd571,2026-01-17,"test: removing bookerly and opendyslexic to support math fonts",math_latex_cjk_pipeline
+f08b753,2026-01-17,"fix: increasing unicode range to cover precise math range",math_latex_cjk_pipeline
+9daba1d,2026-01-17,"doc: adding instructions on properly creating math notes",math_latex_cjk_pipeline
+de39649,2026-01-17,"adding updated math fix scripts",math_latex_cjk_pipeline
+fd2c348,2026-01-17,"feat: adding pomodoro function",pomodoro
+fe80777,2026-01-17,"tweak: modifying pomodoro rendering method for better visibility",pomodoro
+bd81cca,2026-01-17,"update pomodoro firmware for better ergonomics",pomodoro
+7e585d4,2026-01-17,"tweak:modifying starting behavior for pomodoro",pomodoro
+1e8b244,2026-01-17,"fix: reversed pomodoro direction",pomodoro
+a927215,2026-01-17,"tweak: pomodoro: optimizing radial display",pomodoro
+1da8939,2026-01-18,"tweak: adding wifi auto-connect on file transfer server",wifi_file_transfer_autoconnect
+afe8142,2026-01-17,"adding file handling skill",local_skill_scaffold
+01e7407,2026-01-18,"update readme",docs_and_repo_meta
+ba433fc,2026-01-18,"removing stub files",docs_and_repo_meta
+9edf4ad,2026-01-18,"update readme",docs_and_repo_meta
+06c0f2c,2026-01-18,"feat: add external reader fonts",external_reader_fonts
+fb901c4,2026-01-17,"Merge pull request #1 from arot-devs/feat/external-fonts",history_merge_commits
+806f93a,2026-01-18,"chore: add sample Bookerly external font",external_reader_fonts
+8d9a200,2026-01-17,"Merge pull request #2 from arot-devs/feat/external-fonts",history_merge_commits
+404790c,2026-01-17,"docs: add arxiv latex epub workflow",math_latex_cjk_pipeline
+9238963,2026-01-17,"Merge pull request #3 from arot-devs/arxiv-latex-epub",history_merge_commits
+6afa3df,2026-01-18,"fix: fixing build issue on external font; rebuilt firmware",external_reader_fonts
